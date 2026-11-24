@@ -21,7 +21,6 @@ import {
   ToneMappingMode,
   VignetteEffect
 } from 'postprocessing';
-import { N8AOPostPass } from 'n8ao';
 import type { QualityPreset } from '../core/types';
 import { QUALITY_CONFIG } from '../core/config';
 
@@ -137,7 +136,6 @@ export class PostProcessPipeline {
   private scene: THREE.Scene;
   private camera: THREE.Camera;
   private composer: EffectComposer | null = null;
-  private n8aoPass: N8AOPostPass | null = null;
   private bloomEffect: BloomEffect | null = null;
   private vignetteEffect: VignetteEffect | null = null;
   private forzaEffect: ForzaCinemaEffect | null = null;
@@ -154,7 +152,6 @@ export class PostProcessPipeline {
     if (this.composer) {
       this.composer.dispose();
       this.composer = null;
-      this.n8aoPass = null;
     }
 
     const cfg = QUALITY_CONFIG[quality];
@@ -168,37 +165,12 @@ export class PostProcessPipeline {
 
     this.renderer.toneMapping = THREE.NoToneMapping;
 
-    const size = this.renderer.getSize(new THREE.Vector2());
-    const w = Math.max(2, Math.floor(size.x));
-    const h = Math.max(2, Math.floor(size.y));
-
     this.composer = new EffectComposer(this.renderer, {
       frameBufferType: THREE.HalfFloatType,
       multisampling: 0
     });
 
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-
-    // Ground-Truth Half-Res Screen-Space Ambient Occlusion (N8AO) on Medium/High/Ultra!
-    if (quality !== 'low') {
-      try {
-        const aoPass = new N8AOPostPass(this.scene, this.camera, w, h);
-        aoPass.autosetGamma = false;
-        aoPass.configuration.gammaCorrection = false;
-        aoPass.configuration.halfRes = true;
-        aoPass.configuration.aoSamples = quality === 'ultra' ? 16 : 12;
-        aoPass.configuration.denoiseSamples = quality === 'ultra' ? 8 : 6;
-        aoPass.configuration.denoiseRadius = 10;
-        aoPass.configuration.aoRadius = 1.75;
-        aoPass.configuration.distanceFalloff = 1.15;
-        aoPass.configuration.intensity = 2.15;
-        this.n8aoPass = aoPass;
-        this.composer.addPass(aoPass as unknown as Parameters<EffectComposer['addPass']>[0]);
-      } catch (e) {
-        console.warn('[PostProcessPipeline] N8AO fallback:', e);
-        this.n8aoPass = null;
-      }
-    }
 
     const mainEffects: unknown[] = [];
 
@@ -238,9 +210,6 @@ export class PostProcessPipeline {
     if (this.composer) {
       this.composer.setSize(width, height);
     }
-    if (this.n8aoPass) {
-      this.n8aoPass.setSize(Math.max(2, Math.floor(width)), Math.max(2, Math.floor(height)));
-    }
   }
 
   updateDynamic(
@@ -276,7 +245,6 @@ export class PostProcessPipeline {
     if (this.composer) {
       this.composer.dispose();
       this.composer = null;
-      this.n8aoPass = null;
     }
   }
 }
