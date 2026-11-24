@@ -1,0 +1,642 @@
+import type {
+  TeamConfig,
+  TrackConfig,
+  TireCompoundSpec,
+  TireCompoundId,
+  CameraMode,
+  DifficultyId,
+  QualityPreset,
+  GameSettings,
+  SetupPresetId,
+  SetupPresetSpec,
+  ERSMode
+} from './types';
+
+export const SETUP_PRESETS: Record<SetupPresetId, SetupPresetSpec> = {
+  balanced: {
+    id: 'balanced',
+    label: 'Assetto: Bilanciato',
+    desc: 'Equilibrio ideale tra velocità in rettilineo e carico in curva',
+    wingMult: 1.0,
+    aeroBalOffset: 0.0,
+    brakeBias: 0.58,
+    suspStiffness: 1.0
+  },
+  low_drag: {
+    id: 'low_drag',
+    label: 'Assetto: Scarico (Monza)',
+    desc: 'Ali scariche per massima velocità di punta sui lunghi rettilinei',
+    wingMult: 0.90,
+    aeroBalOffset: -0.008,
+    brakeBias: 0.57,
+    suspStiffness: 1.08
+  },
+  high_downforce: {
+    id: 'high_downforce',
+    label: 'Assetto: Alto Carico / Pioggia',
+    desc: 'Massima deportanza per circuiti cittadini, misti o asfalto bagnato',
+    wingMult: 1.12,
+    aeroBalOffset: 0.006,
+    brakeBias: 0.56,
+    suspStiffness: 0.92
+  },
+  anti_understeer: {
+    id: 'anti_understeer',
+    label: 'Assetto: Avantreno Puntato',
+    desc: 'Elimina il sottosterzo in inserimento con ala anteriore carica',
+    wingMult: 1.04,
+    aeroBalOffset: 0.018,
+    brakeBias: 0.565,
+    suspStiffness: 1.05
+  },
+  anti_oversteer: {
+    id: 'anti_oversteer',
+    label: 'Assetto: Stabilità Posteriore',
+    desc: 'Rende il retrotreno granitico in uscita dalle curve lente',
+    wingMult: 1.05,
+    aeroBalOffset: -0.016,
+    brakeBias: 0.595,
+    suspStiffness: 0.95
+  }
+};
+
+export const ERS_MODE_SPECS: Record<ERSMode, { label: string; powerMult: number; drainMult: number; harvestMult: number; color: string }> = {
+  none: { label: 'RICARICA', powerMult: 0.0, drainMult: 0.0, harvestMult: 1.45, color: '#22e56b' },
+  medium: { label: 'MEDIO', powerMult: 0.55, drainMult: 0.48, harvestMult: 1.0, color: '#ffd13b' },
+  overtake: { label: 'SORPASSO', powerMult: 1.0, drainMult: 1.0, harvestMult: 0.85, color: '#00e5ff' },
+  hotlap: { label: 'HOTLAP Q3', powerMult: 1.14, drainMult: 1.25, harvestMult: 0.75, color: '#c84bff' }
+};
+
+export const TEAMS: TeamConfig[] = [
+  {
+    id: 'ferrari',
+    name: 'Scuderia Ferrari',
+    shortName: 'FERRARI',
+    code: 'LEC',
+    aiCode: 'HAM',
+    number: 16,
+    aiNumber: 44,
+    tagline: 'Bilanciata, grande trazione e accelerazione',
+    primaryColor: '#dc0000',
+    secondaryColor: '#ffd200',
+    accentColor: '#111111',
+    tireBandColor: '#ff2424',
+    rimColor: '#1c1f24',
+    helmetColor: '#e61919',
+    clearcoat: 1.0,
+    metalness: 0.28,
+    roughness: 0.14,
+    uiStats: { speed: 95, accel: 97, grip: 93, aero: 93 },
+    physics: {
+      mass: 798,
+      icePowerKW: 645,
+      ersPowerKW: 120,
+      cdA: 0.95,
+      drsDragCut: 0.25,
+      clA: 3.42,
+      mechGrip: 1.78,
+      maxBrakeForce: 34000,
+      aeroBalance: 0.455,
+      puTone: 'ferrari'
+    }
+  },
+  {
+    id: 'monster',
+    name: 'Monster Apex Racing',
+    shortName: 'MONSTER',
+    code: 'MNS',
+    aiCode: 'VPR',
+    number: 88,
+    aiNumber: 89,
+    tagline: 'Assetto scarico, massima velocità di punta',
+    primaryColor: '#121519',
+    secondaryColor: '#39ff14',
+    accentColor: '#1f262e',
+    tireBandColor: '#39ff14',
+    rimColor: '#101418',
+    rimAccent: '#39ff14',
+    helmetColor: '#25d60c',
+    clearcoat: 0.26,
+    metalness: 0.40,
+    roughness: 0.44,
+    uiStats: { speed: 99, accel: 94, grip: 90, aero: 97 },
+    physics: {
+      mass: 798,
+      icePowerKW: 662,
+      ersPowerKW: 128,
+      cdA: 0.89,
+      drsDragCut: 0.27,
+      clA: 3.22,
+      mechGrip: 1.74,
+      maxBrakeForce: 33200,
+      aeroBalance: 0.445,
+      puTone: 'monster'
+    }
+  },
+  {
+    id: 'mcdonalds',
+    name: "McDonald's Golden GP",
+    shortName: "MCDONALD'S",
+    code: 'MCD',
+    aiCode: 'GLD',
+    number: 99,
+    aiNumber: 98,
+    tagline: 'Avantreno affilato, massima agilità nelle chicane',
+    primaryColor: '#da291c',
+    secondaryColor: '#ffc72c',
+    accentColor: '#ffffff',
+    tireBandColor: '#ffc72c',
+    rimColor: '#2b2218',
+    rimAccent: '#ffc72c',
+    helmetColor: '#ffc72c',
+    clearcoat: 0.96,
+    metalness: 0.24,
+    roughness: 0.16,
+    uiStats: { speed: 92, accel: 95, grip: 97, aero: 92 },
+    physics: {
+      mass: 798,
+      icePowerKW: 638,
+      ersPowerKW: 120,
+      cdA: 0.98,
+      drsDragCut: 0.25,
+      clA: 3.58,
+      mechGrip: 1.84,
+      maxBrakeForce: 34800,
+      aeroBalance: 0.468,
+      puTone: 'custom'
+    }
+  },
+  {
+    id: 'redbull',
+    name: 'Red Bull Racing',
+    shortName: 'RED BULL',
+    code: 'VER',
+    aiCode: 'LAW',
+    number: 1,
+    aiNumber: 30,
+    tagline: 'Massima deportanza ed efficienza aerodinamica',
+    primaryColor: '#0e1938',
+    secondaryColor: '#ffd300',
+    accentColor: '#e10600',
+    tireBandColor: '#ff2424',
+    rimColor: '#131724',
+    helmetColor: '#f5f7fa',
+    clearcoat: 0.30,
+    metalness: 0.34,
+    roughness: 0.42,
+    uiStats: { speed: 96, accel: 96, grip: 99, aero: 99 },
+    physics: {
+      mass: 798,
+      icePowerKW: 650,
+      ersPowerKW: 124,
+      cdA: 0.93,
+      drsDragCut: 0.26,
+      clA: 3.72,
+      mechGrip: 1.82,
+      maxBrakeForce: 35200,
+      aeroBalance: 0.458,
+      puTone: 'honda'
+    }
+  },
+  {
+    id: 'mercedes',
+    name: 'Mercedes Silver Arrows',
+    shortName: 'MERCEDES',
+    code: 'RUS',
+    aiCode: 'ANT',
+    number: 63,
+    aiNumber: 12,
+    tagline: 'Frenata millimetrica e stabilità ad alta velocità',
+    primaryColor: '#c9d1d9',
+    secondaryColor: '#00d2be',
+    accentColor: '#12161c',
+    tireBandColor: '#00d2be',
+    rimColor: '#1a2028',
+    rimAccent: '#00d2be',
+    helmetColor: '#00d2be',
+    clearcoat: 1.0,
+    metalness: 0.82,
+    roughness: 0.16,
+    uiStats: { speed: 96, accel: 93, grip: 95, aero: 95 },
+    physics: {
+      mass: 798,
+      icePowerKW: 648,
+      ersPowerKW: 122,
+      cdA: 0.94,
+      drsDragCut: 0.25,
+      clA: 3.50,
+      mechGrip: 1.80,
+      maxBrakeForce: 36500,
+      aeroBalance: 0.452,
+      puTone: 'mercedes'
+    }
+  }
+];
+
+export const TRACKS: TrackConfig[] = [
+  {
+    id: 'monza',
+    name: 'Autodromo Nazionale Monza',
+    shortName: 'MONZA',
+    badge: 'ALTA VELOCITÀ',
+    description: 'Tempio della velocità: rettilinei da 345 km/h, chicane tecniche e parco secolare.',
+    environment: 'Diurno',
+    difficulty: 'Media',
+    laps: 3,
+    trackWidth: 17.5,
+    runoffWidth: 11.5,
+    wallOffset: 20.5,
+    theme: 'monza',
+    skyTop: '#183664',
+    skyHorizon: '#d8cbb8',
+    fogColor: '#9eb2c4',
+    fogDensity: 0.00052,
+    sunColor: '#ffdfa8',
+    sunIntensity: 4.2,
+    sunPos: [340, 72, 240],
+    hemiSky: '#9ab8dc',
+    hemiGround: '#1e2b16',
+    hemiIntensity: 0.50,
+    ambientIntensity: 0.14,
+    asphaltColor: '#22252b',
+    asphaltRoughness: 0.68,
+    asphaltMetalness: 0.14,
+    groundColor: '#253b1a',
+    curbColors: ['#b81818', '#dde2e8'],
+    drsZones: [[0.01, 0.15], [0.68, 0.85]],
+    samples: 720,
+    points: [
+      [-280, 0, -210],
+      [-280, 0, 20],
+      [-280, 0, 230],
+      [-248, 0, 332],
+      [-172, 0, 316],
+      [-105, 0, 370],
+      [55, 0, 392],
+      [215, 0, 338],
+      [310, 0, 205],
+      [268, 0, 75],
+      [330, 0, -25],
+      [290, 0, -145],
+      [225, 0, -275],
+      [105, 0, -342],
+      [-20, 0, -305],
+      [-125, 0, -355],
+      [-232, 0, -315]
+    ]
+  },
+  {
+    id: 'night_city',
+    name: 'Las Vegas / Monaco Night GP',
+    shortName: 'NIGHT CITY',
+    badge: 'NOTTURNO',
+    description: 'Muretti cittadini, grattacieli illuminati, tunnel neon e asfalto specchiato.',
+    environment: 'Notte Neon',
+    difficulty: 'Alta',
+    laps: 3,
+    trackWidth: 15.0,
+    runoffWidth: 4.5,
+    wallOffset: 11.2,
+    theme: 'city',
+    skyTop: '#030510',
+    skyHorizon: '#141a3a',
+    fogColor: '#0b1028',
+    fogDensity: 0.00085,
+    sunColor: '#a2c2ff',
+    sunIntensity: 1.4,
+    sunPos: [-180, 220, -120],
+    hemiSky: '#475ec4',
+    hemiGround: '#1b2033',
+    hemiIntensity: 1.15,
+    ambientIntensity: 0.45,
+    asphaltColor: '#1c202a',
+    asphaltRoughness: 0.24,
+    asphaltMetalness: 0.36,
+    groundColor: '#10131d',
+    curbColors: ['#ff0066', '#00f0ff'],
+    tunnelRange: [0.57, 0.72],
+    drsZones: [[0.01, 0.14], [0.57, 0.72]],
+    samples: 720,
+    points: [
+      [-240, 0, -175],
+      [-240, 0, 35],
+      [-240, 0, 215],
+      [-172, 2.5, 290],
+      [-50, 6.5, 265],
+      [85, 9.5, 305],
+      [212, 7.5, 245],
+      [270, 3.5, 145],
+      [178, 1.5, 85],
+      [258, 0, -25],
+      [262, 0, -175],
+      [158, 0, -268],
+      [28, 0, -238],
+      [-48, 0, -286],
+      [-138, 0, -236],
+      [-218, 0, -260]
+    ]
+  },
+  {
+    id: 'desert',
+    name: 'Sakhir / Yas Desert GP',
+    shortName: 'DESERT GP',
+    badge: 'TRAMONTO',
+    description: 'Curve veloci tra dune scolpite, torri illuminate e riflettori da stadio.',
+    environment: 'Tramonto',
+    difficulty: 'Media',
+    laps: 3,
+    trackWidth: 18.2,
+    runoffWidth: 12.0,
+    wallOffset: 21.0,
+    theme: 'desert',
+    skyTop: '#1b0d38',
+    skyHorizon: '#ff6e3b',
+    fogColor: '#cc5e3e',
+    fogDensity: 0.00050,
+    sunColor: '#ff9c54',
+    sunIntensity: 2.6,
+    sunPos: [-380, 95, -240],
+    hemiSky: '#ff9164',
+    hemiGround: '#5e3824',
+    hemiIntensity: 1.0,
+    ambientIntensity: 0.34,
+    asphaltColor: '#2a282c',
+    asphaltRoughness: 0.72,
+    asphaltMetalness: 0.10,
+    groundColor: '#c27b42',
+    curbColors: ['#e10600', '#ffd24c'],
+    drsZones: [[0.01, 0.14], [0.76, 0.92]],
+    samples: 720,
+    points: [
+      [-295, 0, -195],
+      [-295, 0, 55],
+      [-295, 0, 255],
+      [-208, 2, 338],
+      [-88, 4, 276],
+      [35, 6, 352],
+      [175, 5, 308],
+      [282, 3, 205],
+      [330, 2, 58],
+      [268, 4, -82],
+      [152, 6, -124],
+      [230, 3, -242],
+      [118, 1, -338],
+      [-45, 0, -328],
+      [-198, 0, -318],
+      [-282, 0, -268]
+    ]
+  },
+  {
+    id: 'alpine',
+    name: 'Passo Alpino / Spa GP',
+    shortName: 'ALPI GP',
+    badge: 'DISLIVELLI',
+    description: 'Salite ripide stile Eau Rouge, discese veloci, pini e vette innevate.',
+    environment: 'Montagna',
+    difficulty: 'Esperto',
+    laps: 3,
+    trackWidth: 16.0,
+    runoffWidth: 9.0,
+    wallOffset: 17.5,
+    theme: 'alpine',
+    skyTop: '#0d47a1',
+    skyHorizon: '#c9e6ff',
+    fogColor: '#b7daf7',
+    fogDensity: 0.00040,
+    sunColor: '#fff9eb',
+    sunIntensity: 2.65,
+    sunPos: [240, 340, -160],
+    hemiSky: '#b7dcff',
+    hemiGround: '#3e543a',
+    hemiIntensity: 1.0,
+    ambientIntensity: 0.34,
+    asphaltColor: '#333840',
+    asphaltRoughness: 0.76,
+    asphaltMetalness: 0.08,
+    groundColor: '#3f6338',
+    curbColors: ['#d91616', '#f4f6fa'],
+    drsZones: [[0.01, 0.13], [0.76, 0.90]],
+    samples: 760,
+    points: [
+      [-288, 0, -175],
+      [-288, 2, 65],
+      [-268, 9, 238],
+      [-168, 20, 338],
+      [-22, 30, 306],
+      [115, 40, 358],
+      [252, 46, 286],
+      [338, 47, 145],
+      [298, 40, -15],
+      [208, 30, -135],
+      [258, 19, -258],
+      [128, 11, -348],
+      [-24, 7, -318],
+      [-172, 3, -338],
+      [-272, 1, -262]
+    ]
+  }
+];
+
+export const TIRE_COMPOUNDS: Record<TireCompoundId, TireCompoundSpec> = {
+  soft: {
+    id: 'soft',
+    name: 'Pirelli Soft (C5)',
+    short: 'S',
+    color: '#ff2424',
+    dryGrip: 1.06,
+    wetGrip: 0.62,
+    wearRate: 11.5,
+    optTempMin: 88,
+    optTempMax: 108
+  },
+  medium: {
+    id: 'medium',
+    name: 'Pirelli Medium (C3)',
+    short: 'M',
+    color: '#ffd200',
+    dryGrip: 1.0,
+    wetGrip: 0.66,
+    wearRate: 7.2,
+    optTempMin: 82,
+    optTempMax: 104
+  },
+  hard: {
+    id: 'hard',
+    name: 'Pirelli Hard (C1)',
+    short: 'H',
+    color: '#f2f5fa',
+    dryGrip: 0.94,
+    wetGrip: 0.68,
+    wearRate: 4.4,
+    optTempMin: 78,
+    optTempMax: 102
+  },
+  inter: {
+    id: 'inter',
+    name: 'Intermediate',
+    short: 'I',
+    color: '#22e56b',
+    dryGrip: 0.86,
+    wetGrip: 0.93,
+    wearRate: 8.5,
+    optTempMin: 65,
+    optTempMax: 90
+  },
+  wet: {
+    id: 'wet',
+    name: 'Full Wet',
+    short: 'W',
+    color: '#00a8ff',
+    dryGrip: 0.76,
+    wetGrip: 0.99,
+    wearRate: 6.5,
+    optTempMin: 55,
+    optTempMax: 82
+  }
+};
+
+export const DIFFICULTY_PRESETS: Record<DifficultyId, { label: string; skillMin: number; skillMax: number }> = {
+  rookie: { label: 'Principiante', skillMin: 0.80, skillMax: 0.88 },
+  pro: { label: 'Intermedio', skillMin: 0.88, skillMax: 0.96 },
+  ace: { label: 'Esperto', skillMin: 0.95, skillMax: 1.02 },
+  legend: { label: 'Leggenda', skillMin: 1.01, skillMax: 1.07 }
+};
+
+export const QUALITY_CONFIG: Record<QualityPreset, {
+  label: string;
+  maxDpr: number;
+  shadowMapSize: number;
+  shadows: boolean;
+  postProcessing: boolean;
+  bloom: boolean;
+  smaa: boolean;
+  treeMult: number;
+}> = {
+  low: {
+    label: 'BASSO (Max FPS)',
+    maxDpr: 1.0,
+    shadowMapSize: 512,
+    shadows: false,
+    postProcessing: false,
+    bloom: false,
+    smaa: false,
+    treeMult: 0.45
+  },
+  medium: {
+    label: 'MEDIO (60 FPS)',
+    maxDpr: 1.25,
+    shadowMapSize: 1024,
+    shadows: true,
+    postProcessing: true,
+    bloom: true,
+    smaa: false,
+    treeMult: 0.7
+  },
+  high: {
+    label: 'ALTO (AAA)',
+    maxDpr: 1.6,
+    shadowMapSize: 2048,
+    shadows: true,
+    postProcessing: true,
+    bloom: true,
+    smaa: true,
+    treeMult: 1.0
+  },
+  ultra: {
+    label: 'ULTRA',
+    maxDpr: 2.0,
+    shadowMapSize: 2048,
+    shadows: true,
+    postProcessing: true,
+    bloom: true,
+    smaa: true,
+    treeMult: 1.25
+  }
+};
+
+export const DEFAULT_SETTINGS: GameSettings = {
+  quality: 'high',
+  weather: 'dry',
+  difficulty: 'pro',
+  mode: 'quick_race',
+  compound: 'soft',
+  reverseTrack: false,
+  laps: 3,
+  gridSize: 10,
+
+  // 1. Graphics & Photorealism Post-Processing
+  resolutionScale: 115,
+  shadowQuality: '2048',
+  envReflectionIntensity: 155,
+  bloomIntensity: 115,
+  exposure: 106,
+  smaaEnabled: true,
+  vignetteIntensity: 35,
+  particleDensity: 'high',
+  adaptiveFpsGovernor: true,
+
+  // 2. Camera & Cockpit
+  fovOffset: 0,
+  speedFovIntensity: 100,
+  seatHeightCm: 0,
+  seatForeAftCm: 0,
+  cameraPitchDeg: 0,
+  cameraShakeIntensity: 100,
+  horizonRollIntensity: 65,
+  hideHalo: false,
+  showProximityRadar: true,
+
+  // 3. Car Engineering & Setup
+  setupPreset: 'balanced',
+  customWingLoad: 25,
+  customRearWingLoad: 26,
+  customBrakeBias: 57,
+  customBrakePressure: 100,
+  customDiffOnThrottle: 72,
+  customDiffOffThrottle: 60,
+  customSuspStiff: 10,
+  customRideHeightMm: 28,
+  customTirePressurePsi: 22.5,
+
+  // 4. Controls, FFB & Assists
+  steerSensitivity: 100,
+  steerLinearity: 130,
+  steerDeadzone: 3,
+  ffbRumbleIntensity: 100,
+  abs: true,
+  tractionControl: 'med',
+  manualGearbox: false,
+  racingLine: true,
+  brakeAssist: 'off',
+
+  // 5. Audio, AI & FIA Rules
+  masterVolume: 85,
+  engineVolume: 105,
+  sfxVolume: 100,
+  aiLevelNumber: 84,
+  aiAggressionMult: 100,
+  damageMult: 100,
+  tireWearMult: 100,
+  fuelBurnMult: 100,
+  trackLimitsStrictness: 'standard',
+  timeOfDaySpeed: 3
+};
+
+export const CAMERA_MODES: CameraMode[] = ['CHASE', 'T-CAM', 'COCKPIT', 'NOSE'];
+
+export const FIA_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+
+export const GAME_CONSTANTS = {
+  FIXED_DT: 1 / 240,          // Authentic 240 Hz high-frequency simulator physics tick-rate!
+  AIR_DENSITY: 1.225,
+  GRAVITY: 9.81,
+  ERS_MAX: 100,
+  ERS_DEPLOY_RATE: 14.5,
+  ERS_HARVEST_BRAKE: 24.0,
+  ERS_HARVEST_MGUH: 3.0,
+  DRS_MIN_SPEED: 32.0,
+  DRS_MAX_STEER: 0.28,
+  SLIPSTREAM_MIN_DIST: 5.5,
+  SLIPSTREAM_MAX_DIST: 44.0,
+  SLIPSTREAM_LAT_WINDOW: 3.4
+};

@@ -1,0 +1,764 @@
+/**
+ * APEX GP 3D — AAA F1 Broadcast HUD, Telemetry Trace Analyzer & Showroom UI Controller
+ */
+import * as THREE from 'three';
+import type {
+  CarState,
+  DriverProfileStats,
+  GameSettings,
+  RaceFlag,
+  TeamConfig,
+  TelemetryTracePoint,
+  TrackConfig,
+  TrackData
+} from '../core/types';
+import { ERS_MODE_SPECS, TIRE_COMPOUNDS } from '../core/config';
+
+export function formatTime(sec: number): string {
+  if (!Number.isFinite(sec) || sec <= 0) return '--:--.---';
+  const mins = Math.floor(sec / 60);
+  const rem = sec - mins * 60;
+  const whole = Math.floor(rem);
+  const ms = Math.floor((rem - whole) * 1000);
+  return `${String(mins).padStart(2, '0')}:${String(whole).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+}
+
+export class HUDController {
+  private menuOverlay = document.getElementById('menu-overlay')!;
+  private hudOverlay = document.getElementById('hud-overlay')!;
+  private pauseModal = document.getElementById('pause-modal')!;
+  private finishModal = document.getElementById('finish-modal')!;
+
+  private teamListEl = document.getElementById('team-list')!;
+  private trackListEl = document.getElementById('track-list')!;
+  private previewCanvas = document.getElementById('track-preview-canvas') as HTMLCanvasElement;
+  private previewCtx = this.previewCanvas.getContext('2d')!;
+
+  private lbListEl = document.getElementById('leaderboard-list')!;
+  private sessionTagEl = document.getElementById('hud-session-tag')!;
+  private lapPillEl = document.getElementById('hud-lap-pill')!;
+  private posEl = document.getElementById('hud-pos')!;
+  private posTotalEl = document.getElementById('hud-pos-total')!;
+  private lapTimeEl = document.getElementById('hud-lap-time')!;
+  private bestTimeEl = document.getElementById('hud-best-time')!;
+  private camModeEl = document.getElementById('hud-cam-mode')!;
+  private ersModeEl = document.getElementById('hud-ers-mode')!;
+  private speedEl = document.getElementById('hud-speed')!;
+  private gearEl = document.getElementById('hud-gear')!;
+  private throttleBarEl = document.getElementById('bar-throttle')!;
+  private brakeBarEl = document.getElementById('bar-brake')!;
+  private drsPctEl = document.getElementById('hud-drs-pct')!;
+  private drsFillEl = document.getElementById('hud-drs-fill')!;
+  private drsStatusEl = document.getElementById('hud-drs-status')!;
+  private fpsEl = document.getElementById('hud-fps')!;
+  private minimapTrackEl = document.getElementById('minimap-track-name')!;
+
+  private secEls = [1, 2, 3].map((i) => document.getElementById(`sec-${i}`)!);
+  private compBadgeEl = document.getElementById('hud-compound-badge')!;
+  private tireWearFillEl = document.getElementById('hud-tire-wear-fill')!;
+  private tireTempEl = document.getElementById('hud-tire-temp')!;
+  private fuelEl = document.getElementById('hud-fuel')!;
+  private trackTempEl = document.getElementById('hud-track-temp')!;
+  private penaltyEl = document.getElementById('hud-penalty')!;
+  private wingWarnEl = document.getElementById('hud-wing-warn')!;
+  private fiaFlagEl = document.getElementById('fia-flag-pill')!;
+
+  private startLightsEl = document.getElementById('start-lights')!;
+  private lightPods = [1, 2, 3, 4, 5].map((i) => document.getElementById(`light-${i}`)!);
+  private bannerEl = document.getElementById('race-banner')!;
+  private radioToastEl = document.getElementById('radio-toast')!;
+  private radioMsgEl = document.getElementById('radio-msg')!;
+  private wrongWayEl = document.getElementById('wrong-way-banner')!;
+  private badgeSlipEl = document.getElementById('badge-slipstream')!;
+  private badgeDirtyEl = document.getElementById('badge-dirtyair')!;
+  private badgeDrsEl = document.getElementById('badge-drs')!;
+  private badgePitEl = document.getElementById('badge-pit')!;
+  private badgeMarblesEl = document.getElementById('badge-marbles')!;
+  private badgeOffEl = document.getElementById('badge-offtrack')!;
+  private badgeReplayEl = document.getElementById('badge-replay')!;
+
+  private radarCanvas = document.getElementById('radar-canvas') as HTMLCanvasElement;
+  private radarCtx = this.radarCanvas.getContext('2d')!;
+  private minimapCanvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
+  private minimapCtx = this.minimapCanvas.getContext('2d')!;
+  private minimapBounds: { minX: number; minZ: number; scale: number; ox: number; oz: number; startPos: THREE.Vector3 } | null = null;
+  private minimapTrackPts: THREE.Vector3[] = [];
+
+  private speedoCanvas = document.getElementById('speedo-dial-canvas') as HTMLCanvasElement | null;
+  private speedoCtx = this.speedoCanvas ? this.speedoCanvas.getContext('2d') : null;
+
+  private traceCanvas = document.getElementById('telemetry-trace-canvas') as HTMLCanvasElement;
+  private traceCtx = this.traceCanvas.getContext('2d')!;
+
+  private rpmLeds: HTMLDivElement[] = [];
+  private bannerTimeout: number | null = null;
+  private radioTimeout: number | null = null;
+  private lastLbUpdate = 0;
+
+  constructor() {
+    const rpmWrap = document.getElementById('rpm-leds')!;
+    rpmWrap.innerHTML = '';
+    for (let i = 0; i < 15; i++) {
+      const d = document.createElement('div');
+      d.className = 'rpm-led';
+      rpmWrap.appendChild(d);
+      this.rpmLeds.push(d);
+    }
+  }
+
+  updateLicenseUI(stats: DriverProfileStats): void {
+    const el = document.getElementById('license-pill');
+    if (!el) return;
+    const grade = stats.safetyRating >= 90 ? 'S' : stats.safetyRating >= 78 ? 'A' : stats.safetyRating >= 65 ? 'B' : 'C';
+    el.textContent = `🪪 LICENZA ${grade} (${Math.round(stats.safetyRating)}%) • ${Math.round(stats.skillRating)} SR • ${stats.wins}🏆`;
+  }
+
+  initMenu(
+    teams: TeamConfig[],
+    tracks: TrackConfig[],
+    selectedTeamIdx: number,
+    selectedTrackIdx: number,
+    onSelectTeam: (idx: number) => void,
+    onSelectTrack: (idx: number) => void
+  ): void {
+    this.teamListEl.innerHTML = '';
+    teams.forEach((team, idx) => {
+      const card = document.createElement('div');
+      card.className = 'team-card' + (idx === selectedTeamIdx ? ' active' : '');
+      card.style.setProperty('--team-color', team.secondaryColor === '#111111' ? team.primaryColor : team.secondaryColor);
+      card.innerHTML = `
+        <div class="team-swatch" style="background: linear-gradient(180deg, ${team.primaryColor}, ${team.secondaryColor})"></div>
+        <div class="team-info">
+          <strong>${team.name}</strong>
+          <small>${team.tagline}</small>
+        </div>
+        <span class="team-num">#${team.number}</span>
+      `;
+      card.addEventListener('click', () => onSelectTeam(idx));
+      this.teamListEl.appendChild(card);
+    });
+
+    this.trackListEl.innerHTML = '';
+    tracks.forEach((track, idx) => {
+      const card = document.createElement('div');
+      card.className = 'track-card' + (idx === selectedTrackIdx ? ' active' : '');
+      card.innerHTML = `
+        <div class="track-card-top">
+          <strong>${track.name}</strong>
+          <span class="track-badge">${track.badge}</span>
+        </div>
+        <small>${track.description}</small>
+      `;
+      card.addEventListener('click', () => onSelectTrack(idx));
+      this.trackListEl.appendChild(card);
+    });
+
+    this.updateSelectedTeamUI(teams[selectedTeamIdx], selectedTeamIdx);
+    this.updateSelectedTrackUI(tracks[selectedTrackIdx], selectedTrackIdx);
+  }
+
+  updateSelectedTeamUI(team: TeamConfig, activeIdx: number): void {
+    Array.from(this.teamListEl.children).forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    document.getElementById('spec-number')!.textContent = `#${team.number}`;
+    document.getElementById('spec-team-name')!.textContent = team.name;
+    document.getElementById('spec-tagline')!.textContent = team.tagline;
+    document.getElementById('val-speed')!.textContent = String(team.uiStats.speed);
+    document.getElementById('val-accel')!.textContent = String(team.uiStats.accel);
+    document.getElementById('val-grip')!.textContent = String(team.uiStats.grip);
+    document.getElementById('val-boost')!.textContent = String(team.uiStats.aero);
+    (document.getElementById('bar-speed') as HTMLElement).style.width = `${team.uiStats.speed}%`;
+    (document.getElementById('bar-accel') as HTMLElement).style.width = `${team.uiStats.accel}%`;
+    (document.getElementById('bar-grip') as HTMLElement).style.width = `${team.uiStats.grip}%`;
+    (document.getElementById('bar-boost') as HTMLElement).style.width = `${team.uiStats.aero}%`;
+  }
+
+  updateSelectedTrackUI(trackCfg: TrackConfig, activeIdx: number): void {
+    Array.from(this.trackListEl.children).forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    document.getElementById('meta-env')!.textContent = trackCfg.environment;
+    document.getElementById('meta-laps')!.textContent = `${trackCfg.laps} Giri`;
+
+    const ctrl = trackCfg.points.map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    const curve = new THREE.CatmullRomCurve3(ctrl, true, 'centripetal', 0.5);
+    const pts = curve.getSpacedPoints(160);
+    this._drawSpline2D(this.previewCtx, this.previewCanvas.width, this.previewCanvas.height, pts, 10, trackCfg.theme === 'city' ? '#00f0ff' : '#ff2e24');
+  }
+
+  private _drawSpline2D(ctx: CanvasRenderingContext2D, w: number, h: number, pts: THREE.Vector3[], pad: number, strokeColor: string) {
+    ctx.clearRect(0, 0, w, h);
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    }
+    const spanX = Math.max(1, maxX - minX);
+    const spanZ = Math.max(1, maxZ - minZ);
+    const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanZ);
+    const ox = (w - spanX * scale) * 0.5;
+    const oz = (h - spanZ * scale) * 0.5;
+
+    ctx.save();
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const x = ox + (p.x - minX) * scale;
+      const y = oz + (p.z - minZ) * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 7;
+    ctx.stroke();
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 2.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  prepareRaceMinimap(track: TrackData, totalCars: number, sessionName = 'APEX GP'): void {
+    this.minimapTrackEl.textContent = track.config.shortName;
+    this.sessionTagEl.textContent = sessionName;
+    this.posTotalEl.textContent = `/${totalCars}`;
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i < track.N; i += 4) pts.push(track.samples[i].pos);
+    this.minimapTrackPts = pts;
+
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
+    const pad = 22;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.z < minZ) minZ = p.z;
+      if (p.z > maxZ) maxZ = p.z;
+    }
+    const spanX = Math.max(1, maxX - minX);
+    const spanZ = Math.max(1, maxZ - minZ);
+    const scale = Math.min((w - pad * 2) / spanX, (h - pad * 2) / spanZ);
+    this.minimapBounds = {
+      minX, minZ, scale,
+      ox: (w - spanX * scale) * 0.5,
+      oz: (h - spanZ * scale) * 0.5,
+      startPos: track.samples[track.startIndex].pos
+    };
+  }
+
+  showMenu(): void {
+    this.menuOverlay.classList.remove('hidden');
+    this.hudOverlay.classList.add('hidden');
+    this.pauseModal.classList.add('hidden');
+    this.finishModal.classList.add('hidden');
+  }
+
+  showRaceHUD(): void {
+    this.menuOverlay.classList.add('hidden');
+    this.hudOverlay.classList.remove('hidden');
+    this.pauseModal.classList.add('hidden');
+    this.finishModal.classList.add('hidden');
+  }
+
+  setPaused(paused: boolean): void {
+    this.pauseModal.classList.toggle('hidden', !paused);
+  }
+
+  setReplayBadge(active: boolean): void {
+    this.badgeReplayEl.classList.toggle('hidden', !active);
+  }
+
+  setStartLights(state: number | 'GO' | 'HIDE', gantryLights: THREE.MeshStandardMaterial[] = []): void {
+    if (state === 'HIDE') {
+      this.startLightsEl.classList.add('hidden');
+      return;
+    }
+    this.startLightsEl.classList.remove('hidden');
+
+    this.lightPods.forEach((pod, idx) => {
+      pod.classList.remove('on', 'go');
+      const bulbMat = gantryLights[idx];
+      if (state === 'GO') {
+        pod.classList.add('go');
+        if (bulbMat) { bulbMat.emissive.setHex(0x00ff55); bulbMat.emissiveIntensity = 3.2; }
+      } else if (typeof state === 'number' && idx < state) {
+        pod.classList.add('on');
+        if (bulbMat) { bulbMat.emissive.setHex(0xff0000); bulbMat.emissiveIntensity = 3.4; }
+      } else if (bulbMat) {
+        bulbMat.emissiveIntensity = 0;
+      }
+    });
+  }
+
+  showBanner(text: string, durationMs = 2000): void {
+    this.bannerEl.textContent = text;
+    this.bannerEl.classList.remove('hidden');
+    if (this.bannerTimeout) window.clearTimeout(this.bannerTimeout);
+    this.bannerTimeout = window.setTimeout(() => this.bannerEl.classList.add('hidden'), durationMs);
+  }
+
+  showRadio(message: string, durationMs = 3500): void {
+    this.radioMsgEl.textContent = message;
+    this.radioToastEl.classList.remove('hidden');
+    if (this.radioTimeout) window.clearTimeout(this.radioTimeout);
+    this.radioTimeout = window.setTimeout(() => this.radioToastEl.classList.add('hidden'), durationMs);
+  }
+
+  updateRaceHUD(
+    player: CarState,
+    sortedCars: CarState[],
+    track: TrackData,
+    raceFlag: RaceFlag,
+    isQualifying: boolean,
+    camMode: string,
+    fps: number,
+    nowMs: number,
+    settings: GameSettings
+  ): void {
+    const kmh = Math.max(0, Math.round(Math.abs(player.speed) * 3.6));
+    this.speedEl.textContent = String(kmh);
+    this.gearEl.textContent = player.gear === -1 ? 'R' : player.gear === 0 ? 'N' : String(player.gear);
+
+    this.throttleBarEl.style.height = `${Math.round(player.throttleInput * 100)}%`;
+    this.brakeBarEl.style.height = `${Math.round(player.brakeInput * 100)}%`;
+
+    const rpmFrac = THREE.MathUtils.clamp((player.rpm - 5500) / 9300, 0, 1);
+    const litLeds = Math.round(rpmFrac * 15);
+    const redlineFlash = rpmFrac > 0.94 && Math.floor(nowMs / 65) % 2 === 0;
+    for (let i = 0; i < 15; i++) {
+      const led = this.rpmLeds[i];
+      led.className = 'rpm-led';
+      if (i < litLeds && !redlineFlash) {
+        if (i < 5) led.classList.add('lit-green');
+        else if (i < 10) led.classList.add('lit-red');
+        else led.classList.add('lit-blue');
+      }
+    }
+
+    const ersPct = Math.round(player.ersEnergy);
+    const ersSpec = ERS_MODE_SPECS[player.ersMode];
+    this.ersModeEl.textContent = ersSpec.label.slice(0, 4);
+    this.ersModeEl.style.color = ersSpec.color;
+    this.drsPctEl.textContent = `${ersPct}%`;
+    this.drsFillEl.style.width = `${ersPct}%`;
+    this.drsFillEl.className = 'drs-fill' + (player.ersActive ? ' deploy' : player.ersHarvesting ? ' harvest' : '');
+
+    if (player.drsActive) {
+      this.drsStatusEl.textContent = 'DRS APERTO';
+      this.drsStatusEl.className = 'drs-pill active';
+    } else if (player.drsAvailable) {
+      this.drsStatusEl.textContent = 'DRS [SHIFT]';
+      this.drsStatusEl.className = 'drs-pill ready';
+    } else {
+      this.drsStatusEl.textContent = 'DRS CHIUSO';
+      this.drsStatusEl.className = 'drs-pill';
+    }
+
+    // FIA Flag Pill
+    if (raceFlag === 'VSC') {
+      this.fiaFlagEl.className = 'fia-flag vsc';
+      this.fiaFlagEl.textContent = '🟠 VSC • VIRTUAL SAFETY CAR (MAX 195 KM/H)';
+    } else if (raceFlag === 'YELLOW') {
+      this.fiaFlagEl.className = 'fia-flag yellow';
+      this.fiaFlagEl.textContent = '🟡 BANDIERA GIALLA • PERICOLO IN PISTA';
+    } else {
+      this.fiaFlagEl.className = 'fia-flag green';
+      this.fiaFlagEl.textContent = track.trackWetness > 0.45
+        ? `🌧️ PISTA BAGNATA (${Math.round(track.trackWetness * 100)}%) • DRS DISABILITATO`
+        : '🟢 BANDIERA VERDE • PISTA LIBERA';
+    }
+
+    // Position, Laps, Sectors & Multi-Layer Tire/Fuel Widget
+    const playerPos = sortedCars.indexOf(player) + 1;
+    this.posEl.textContent = String(playerPos);
+    this.lapPillEl.textContent = isQualifying
+      ? 'QUALIFICA Q3'
+      : settings.mode === 'time_attack'
+      ? `GIRO ${player.lap}`
+      : `GIRO ${Math.min(player.lap, player.maxLaps)} / ${player.maxLaps}`;
+    this.lapTimeEl.textContent = formatTime(player.currentLapTime);
+    this.bestTimeEl.textContent = formatTime(player.bestLapTime);
+    this.camModeEl.textContent = camMode;
+    this.fpsEl.textContent = `${Math.round(fps)} FPS`;
+
+    for (let s = 0; s < 3; s++) {
+      const st = player.lastSectorStatus[s];
+      this.secEls[s].className = 'sec-pill' + (st !== 'none' ? ` ${st}` : '');
+    }
+
+    const comp = TIRE_COMPOUNDS[player.compound];
+    this.compBadgeEl.textContent = comp.short;
+    this.compBadgeEl.style.color = comp.color;
+    this.compBadgeEl.style.borderColor = comp.color;
+    this.tireWearFillEl.style.width = `${Math.round(player.tireWear)}%`;
+    this.tireWearFillEl.style.background = player.tireWear > 45 ? '#22e56b' : player.tireWear > 24 ? '#ffd200' : '#ff2424';
+    this.tireTempEl.textContent = `S:${Math.round(player.tireSurfaceTemp)}°/C:${Math.round(player.tireCoreTemp)}°`;
+
+    this.fuelEl.textContent = `${player.fuelKg.toFixed(1)}kg`;
+    this.trackTempEl.textContent = `${Math.round(track.trackTempC)}°C`;
+    if (player.timePenaltySec > 0) {
+      this.penaltyEl.textContent = `+${player.timePenaltySec}s PEN`;
+      this.penaltyEl.classList.remove('hidden');
+    } else {
+      this.penaltyEl.classList.add('hidden');
+    }
+
+    this.wingWarnEl.classList.toggle('hidden', player.wingDamage < 0.2 && !player.puncture);
+    if (player.puncture) this.wingWarnEl.textContent = '⚠ FORATURA! RIENTRA AI BOX [P]';
+    else this.wingWarnEl.textContent = '⚠ DANNO AERO — BOX [P]';
+
+    this.wrongWayEl.classList.toggle('hidden', !player.wrongWay);
+    this.badgeSlipEl.classList.toggle('hidden', player.slipstream < 0.25);
+    this.badgeDirtyEl.classList.toggle('hidden', player.dirtyAir < 0.35);
+    this.badgeDrsEl.classList.toggle('hidden', !player.drsActive);
+    this.badgeMarblesEl.classList.toggle('hidden', player.marblePickup < 0.3);
+    this.badgeOffEl.classList.toggle('hidden', !player.offTrack);
+    this.badgePitEl.classList.toggle('hidden', !(player._tInfo.isPitZone && !player.inPit && (player.tireWear < 82 || player.wingDamage > 0.15 || player.puncture)));
+
+    // 10-Car Leaderboard Tower (~8 Hz)
+    if (nowMs - this.lastLbUpdate > 125) {
+      this.lastLbUpdate = nowMs;
+      const leaderDist = sortedCars[0].raceDistance;
+      let html = '';
+      sortedCars.forEach((c, idx) => {
+        const gapMeters = Math.max(0, leaderDist - c.raceDistance);
+        const gapSec = (gapMeters / Math.max(35, c.speed || 55)).toFixed(1);
+        const gapLabel = idx === 0 ? 'LEAD' : c.inPit ? 'PIT' : c.finished ? 'FIN' : `+${gapSec}`;
+        const barColor = c.team.id === 'monster' ? '#39ff14'
+          : c.team.id === 'mercedes' ? '#00d2be'
+          : c.team.primaryColor;
+        const cSpec = TIRE_COMPOUNDS[c.compound];
+        html += `
+          <div class="lb-row ${c.isPlayer ? 'is-player' : ''}">
+            <span class="lb-pos">${idx + 1}</span>
+            <span class="lb-color" style="background:${barColor}"></span>
+            <span class="lb-code">${c.code}</span>
+            <span class="lb-comp" style="color:${cSpec.color}">${cSpec.short}</span>
+            <span class="lb-gap">${gapLabel}</span>
+          </div>
+        `;
+      });
+      this.lbListEl.innerHTML = html;
+    }
+
+    this._renderProximityRadar(player, sortedCars);
+    this._renderMinimap(sortedCars);
+    this._renderCircularSpeedo(player);
+  }
+
+  private _renderCircularSpeedo(player: CarState): void {
+    const ctx = this.speedoCtx;
+    const canvas = this.speedoCanvas;
+    if (!ctx || !canvas) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w * 0.5;
+    const cy = h * 0.5;
+    ctx.clearRect(0, 0, w, h);
+
+    const startAng = Math.PI * 0.78;
+    const totalSweep = Math.PI * 1.44;
+    const endAng = startAng + totalSweep;
+    const rArc = 83;
+
+    // 1. Subtle background track arc + crimson redline zone (82%..100%)
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rArc, startAng, endAng);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.14)';
+    ctx.lineWidth = 6.5;
+    ctx.stroke();
+
+    const redStart = startAng + totalSweep * 0.80;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rArc, redStart, endAng);
+    ctx.strokeStyle = 'rgba(255, 36, 66, 0.45)';
+    ctx.lineWidth = 6.5;
+    ctx.stroke();
+
+    // 2. Active glowing RPM sweep arc + analog needle
+    const rpmNorm = THREE.MathUtils.clamp((player.rpm - 3800) / 11200, 0, 1);
+    const needleAng = startAng + totalSweep * rpmNorm;
+
+    if (rpmNorm > 0.01) {
+      const grad = ctx.createLinearGradient(cx - rArc, cy, cx + rArc, cy);
+      grad.addColorStop(0.0, '#00e5ff');
+      grad.addColorStop(0.72, '#eefaff');
+      grad.addColorStop(1.0, '#ff1e42');
+      ctx.beginPath();
+      ctx.arc(cx, cy, rArc, startAng, needleAng);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 6.5;
+      ctx.stroke();
+    }
+
+    // 3. Precision tick marks & numeric x1000 RPM labels (0..15)
+    ctx.font = '800 8.5px "Segoe UI", system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const nMajor = 10;
+    for (let i = 0; i <= nMajor * 2; i++) {
+      const f = i / (nMajor * 2);
+      const a = startAng + totalSweep * f;
+      const isMajor = i % 2 === 0;
+      const rOuter = 76;
+      const rInner = isMajor ? 68.5 : 72.5;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * rInner, cy + Math.sin(a) * rInner);
+      ctx.lineTo(cx + Math.cos(a) * rOuter, cy + Math.sin(a) * rOuter);
+      ctx.strokeStyle = f >= 0.8 ? '#ff3855' : isMajor ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0.34)';
+      ctx.lineWidth = isMajor ? 1.8 : 1.0;
+      ctx.stroke();
+
+      if (isMajor && i % 4 === 0) {
+        const tx = cx + Math.cos(a) * 59;
+        const ty = cy + Math.sin(a) * 59;
+        ctx.fillStyle = f >= 0.8 ? '#ff556e' : 'rgba(255,255,255,0.65)';
+        ctx.fillText(String(Math.round(f * 15)), tx, ty);
+      }
+    }
+
+    // 4. Inner Throttle (right green arc) & Brake (left crimson arc) telemetry bars
+    if (player.throttleInput > 0.02) {
+      const thSweep = player.throttleInput * 0.65;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 91, Math.PI * 0.22 - thSweep, Math.PI * 0.22);
+      ctx.strokeStyle = '#22e56b';
+      ctx.lineWidth = 3.2;
+      ctx.stroke();
+    }
+    if (player.brakeInput > 0.02) {
+      const brSweep = player.brakeInput * 0.65;
+      ctx.beginPath();
+      ctx.arc(cx, cy, 91, Math.PI * 0.78, Math.PI * 0.78 + brSweep);
+      ctx.strokeStyle = '#ff2b3d';
+      ctx.lineWidth = 3.2;
+      ctx.stroke();
+    }
+
+    // 5. Crisp illuminated analog tachometer needle
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(needleAng);
+    ctx.beginPath();
+    ctx.moveTo(46, -1.6);
+    ctx.lineTo(86, -0.6);
+    ctx.lineTo(86, 0.6);
+    ctx.lineTo(46, 1.6);
+    ctx.closePath();
+    ctx.fillStyle = rpmNorm > 0.84 ? '#ff2a48' : '#ffffff';
+    ctx.shadowColor = rpmNorm > 0.84 ? '#ff1e38' : '#00e5ff';
+    ctx.shadowBlur = 8;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  private _renderProximityRadar(player: CarState, cars: CarState[]): void {
+    const sinY = Math.sin(player.yaw);
+    const cosY = Math.cos(player.yaw);
+    const fwdX = sinY, fwdZ = cosY;
+    const rightX = -cosY, rightZ = sinY;
+
+    const nearby: Array<{ rx: number; rz: number }> = [];
+    for (const c of cars) {
+      if (c === player) continue;
+      const dx = c.pos.x - player.pos.x;
+      const dz = c.pos.z - player.pos.z;
+      if (dx * dx + dz * dz > 18 * 18) continue;
+      nearby.push({ rx: dx * rightX + dz * rightZ, rz: dx * fwdX + dz * fwdZ });
+    }
+
+    this.radarCanvas.classList.toggle('hidden', nearby.length === 0);
+    if (nearby.length === 0) return;
+
+    const ctx = this.radarCtx;
+    const w = this.radarCanvas.width;
+    const h = this.radarCanvas.height;
+    const cx = w * 0.5, cy = h * 0.5;
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, 32, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, 58, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillRect(cx - 5, cy - 11, 10, 22);
+
+    const scale = 3.2;
+    for (const n of nearby) {
+      const px = cx + n.rx * scale;
+      const py = cy - n.rz * scale;
+      ctx.fillStyle = Math.abs(n.rz) < 5 && Math.abs(n.rx) < 4.5 ? '#ff2424' : '#ffd200';
+      ctx.fillRect(px - 5, py - 11, 10, 22);
+    }
+  }
+
+  private _renderMinimap(cars: CarState[]): void {
+    if (!this.minimapBounds) return;
+    const ctx = this.minimapCtx;
+    const w = this.minimapCanvas.width;
+    const h = this.minimapCanvas.height;
+    const { minX, minZ, scale, ox, oz, startPos } = this.minimapBounds;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.save();
+
+    // Subtle circular compass radar rings
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(w * 0.5, h * 0.5, w * 0.44, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(w * 0.5, h * 0.5, w * 0.25, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.beginPath();
+    this.minimapTrackPts.forEach((p, i) => {
+      const x = ox + (p.x - minX) * scale;
+      const y = oz + (p.z - minZ) * scale;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.lineJoin = 'round';
+    // Dark road casing + Forza Horizon glowing cyan route line (#00e5ff)
+    ctx.strokeStyle = 'rgba(8, 14, 24, 0.72)';
+    ctx.lineWidth = 8.0;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(0, 210, 255, 0.32)';
+    ctx.lineWidth = 6.2;
+    ctx.stroke();
+    ctx.strokeStyle = '#29e8ff';
+    ctx.lineWidth = 2.8;
+    ctx.stroke();
+
+    const sx = ox + (startPos.x - minX) * scale;
+    const sy = oz + (startPos.z - minZ) * scale;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(sx - 4, sy - 2, 8, 4);
+
+    const ordered = [...cars].sort((a, b) => (a.isPlayer ? 1 : b.isPlayer ? -1 : 0));
+    for (const c of ordered) {
+      const cx = ox + (c.pos.x - minX) * scale;
+      const cy = oz + (c.pos.z - minZ) * scale;
+      const dotColor = c.team.id === 'monster' ? '#39ff14'
+        : c.team.id === 'mercedes' ? '#00d2be'
+        : c.team.id === 'redbull' ? '#ffd300'
+        : c.team.primaryColor;
+      if (c.isPlayer) {
+        // Crisp directional player chevron arrow in white + cyan halo!
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(Math.atan2(Math.sin(c.yaw), Math.cos(c.yaw)) - Math.PI * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(8, 0);
+        ctx.lineTo(-5.5, -5.2);
+        ctx.lineTo(-2.8, 0);
+        ctx.lineTo(-5.5, 5.2);
+        ctx.closePath();
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 8;
+        ctx.fill();
+        ctx.restore();
+      } else {
+        ctx.beginPath(); ctx.arc(cx, cy, 3.1, 0, Math.PI * 2);
+        ctx.fillStyle = dotColor;
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Renders the Post-Race Telemetry Analyzer Graph (Speed in Cyan, Throttle in Green, Brake in Red).
+   */
+  renderTelemetryTrace(trace: TelemetryTracePoint[]): void {
+    const ctx = this.traceCtx;
+    const w = this.traceCanvas.width;
+    const h = this.traceCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Background grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    for (let y = 18; y < h; y += 22) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    if (trace.length < 2) {
+      ctx.fillStyle = '#93a0b8';
+      ctx.font = '700 11px Consolas, monospace';
+      ctx.fillText('Nessuna traccia telemetrica disponibile', 14, h * 0.5);
+      return;
+    }
+
+    const drawCurve = (color: string, width: number, valFn: (pt: TelemetryTracePoint) => number) => {
+      ctx.beginPath();
+      trace.forEach((pt, idx) => {
+        const x = (idx / (trace.length - 1)) * w;
+        const y = h - 4 - THREE.MathUtils.clamp(valFn(pt), 0, 1) * (h - 10);
+        if (idx === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    };
+
+    // Throttle (Green), Brake (Red), Speed (Cyan)
+    drawCurve('rgba(34, 229, 107, 0.55)', 1.5, (p) => p.throttle / 100);
+    drawCurve('rgba(255, 43, 43, 0.65)', 1.5, (p) => p.brake / 100);
+    drawCurve('#00e5ff', 2.2, (p) => p.kmh / 350);
+  }
+
+  showFinishModal(params: {
+    sortedCars: CarState[];
+    player: CarState;
+    trackName: string;
+    isQualifyingResult: boolean;
+    hasNextAction: boolean;
+    nextActionLabel: string;
+    trace: TelemetryTracePoint[];
+    champPointsMap?: Record<string, number>;
+  }): void {
+    const { sortedCars, player, trackName, isQualifyingResult, hasNextAction, nextActionLabel, trace, champPointsMap } = params;
+    const pos = sortedCars.indexOf(player) + 1;
+
+    document.getElementById('finish-eyebrow')!.textContent = isQualifyingResult
+      ? 'QUALIFICHE Q3 COMPLETATE — GRIGLIA DI PARTENZA'
+      : 'BANDIERA A SCACCHI';
+
+    const titles: Record<number, string> = isQualifyingResult
+      ? { 1: '⚡ POLE POSITION — P1 IN GRIGLIA!', 2: '🔥 PRIMA FILA — P2 IN GRIGLIA!', 3: '🏁 SECONDA FILA — P3 IN GRIGLIA!' }
+      : { 1: '🏆 1° POSTO — VITTORIA!', 2: '🥈 2° POSTO — PODIO!', 3: '🥉 3° POSTO — PODIO!' };
+
+    document.getElementById('finish-title')!.textContent = titles[pos] || `${pos}° POSTO — ${isQualifyingResult ? 'GRIGLIA DEFINITA' : 'GARA COMPLETATA'}`;
+    document.getElementById('finish-subtitle')!.textContent = `${trackName} • Miglior Giro: ${formatTime(player.bestLapTime)}`;
+
+    const nextBtn = document.getElementById('btn-finish-next')!;
+    nextBtn.textContent = nextActionLabel;
+    nextBtn.classList.toggle('hidden', !hasNextAction);
+
+    const list = document.getElementById('finish-standings')!;
+    list.innerHTML = sortedCars
+      .map((c, idx) => {
+        const barColor = c.team.id === 'monster' ? '#39ff14' : c.team.id === 'mercedes' ? '#00d2be' : c.team.primaryColor;
+        const ptsStr = champPointsMap ? ` • <strong>${champPointsMap[c.code] ?? 0} pt</strong>` : '';
+        const penStr = c.timePenaltySec > 0 ? ` (+${c.timePenaltySec}s)` : '';
+        const timeStr = c.finished ? formatTime(c.finishTime) + penStr : `Giro ${c.lap}/${c.maxLaps}`;
+        return `
+          <div class="fin-row ${c.isPlayer ? 'is-player' : ''}">
+            <span>${idx + 1}°</span>
+            <span style="background:${barColor}; height:16px; border-radius:2px;"></span>
+            <span>${c.team.shortName} <strong>#${c.number} ${c.code}</strong> ${c.isPlayer ? '(TU)' : ''}${ptsStr}</span>
+            <span class="fin-time">${timeStr}</span>
+          </div>
+        `;
+      })
+      .join('');
+
+    this.renderTelemetryTrace(trace);
+    this.finishModal.classList.remove('hidden');
+  }
+}
