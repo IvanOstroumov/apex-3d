@@ -149,7 +149,7 @@ export class ApexGPGame {
       onReset: () => {
         if (this.mode === 'RACE' && !this.paused && this.player && this.raceActive && !this.replayActive) {
           resetCarOnTrack(this.player, this.track!);
-          this.hud.showBanner('AUTO RIPOSIZIONATA', 1100);
+          this.hud.showBanner(this.hud.t().bannerCarReset, 1100);
         }
       },
       onPit: () => { this._requestPlayerPitStop(); },
@@ -163,6 +163,7 @@ export class ApexGPGame {
     this._bindWindowEvents();
 
     this.hud.updateLicenseUI(this.driverStats);
+    this.hud.applyLanguage(this.audio.muted, this.settings.mode);
     this.showroom.setTeam(TEAMS[this.selectedTeamIdx], TIRE_COMPOUNDS[this.settings.compound].color);
     this.showroom.setVisible(true, this.studioEnv);
     this.hud.showMenu();
@@ -277,7 +278,9 @@ export class ApexGPGame {
         const m = (btn as HTMLElement).dataset.mode as GameMode;
         this.settings.mode = m;
         document.querySelectorAll('#mode-tabs .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
-        document.getElementById('meta-laps')!.textContent = m === 'weekend' ? 'Q3 + 3 Giri' : m === 'time_attack' ? 'Libero' : '3 Giri';
+        const tr = this.hud.t();
+        const laps = TRACKS[this.selectedTrackIdx].laps;
+        document.getElementById('meta-laps')!.textContent = m === 'weekend' ? tr.lapsWeekend : m === 'time_attack' ? tr.lapsFree : `${laps} ${tr.lapsUnit}`;
       });
     });
 
@@ -365,11 +368,34 @@ export class ApexGPGame {
     const toggleAudio = () => {
       this.audio.init();
       const muted = this.audio.toggleMute();
-      document.getElementById('btn-mute-menu')!.textContent = muted ? '🔇 Audio OFF' : '🔊 Audio ON';
+      const tr = this.hud.t();
+      document.getElementById('btn-mute-menu')!.textContent = muted ? tr.audioOff : tr.audioOn;
       document.getElementById('btn-hud-mute')!.textContent = muted ? '🔇' : '🔊';
     };
     document.getElementById('btn-mute-menu')!.addEventListener('click', toggleAudio);
     document.getElementById('btn-hud-mute')!.addEventListener('click', toggleAudio);
+
+    const switchLang = () => {
+      this.hud.toggleLanguage(this.audio.muted, this.settings.mode);
+    };
+    document.getElementById('btn-lang-toggle')?.addEventListener('click', switchLang);
+    document.getElementById('btn-wiki-lang')?.addEventListener('click', switchLang);
+
+    // Interactive F1 Wiki / Academy Modal bindings
+    document.getElementById('btn-open-wiki-menu')?.addEventListener('click', () => this.openWikiModal(true));
+    document.getElementById('btn-open-wiki-hud')?.addEventListener('click', () => this.openWikiModal(true));
+    document.getElementById('btn-open-wiki-pause')?.addEventListener('click', () => {
+      document.getElementById('pause-modal')?.classList.add('hidden');
+      this.openWikiModal(true);
+    });
+    document.getElementById('btn-close-wiki-top')?.addEventListener('click', () => {
+      this.openWikiModal(false);
+      if (this.mode === 'RACE' && this.paused) {
+        this.paused = false;
+        this.hud.setPaused(false);
+      }
+    });
+
     document.getElementById('btn-hud-radio1')!.addEventListener('click', () => this._handleRadioQuery(1));
     document.getElementById('btn-hud-radio2')!.addEventListener('click', () => this._handleRadioQuery(2));
     document.getElementById('btn-hud-ers')!.addEventListener('click', () => this._cyclePlayerErsMode());
@@ -395,6 +421,14 @@ export class ApexGPGame {
 
     document.getElementById('btn-export-json')!.addEventListener('click', () => this._exportTelemetryJSON());
     this._setupProSettingsModal(syncSlidersUI);
+  }
+
+  public openWikiModal(open = true): void {
+    this.hud.openWikiModal(open);
+    if (open && this.mode === 'RACE' && !this.paused) {
+      this.paused = true;
+      this.audio.stopEngine();
+    }
   }
 
   public openSettingsModal(open = true): void {
@@ -494,8 +528,8 @@ export class ApexGPGame {
     // 2. Camera & Cockpit
     bindRange('set-fov', 'lbl-set-fov', (v) => `${v > 0 ? '+' : ''}${v}°`, (v) => { this.settings.fovOffset = v; });
     bindRange('set-speedfov', 'lbl-set-speedfov', (v) => `${v}%`, (v) => { this.settings.speedFovIntensity = v; });
-    bindRange('set-seath', 'lbl-set-seath', (v) => `${v > 0 ? '+' : ''}${v} см`, (v) => { this.settings.seatHeightCm = v; });
-    bindRange('set-seatfore', 'lbl-set-seathe', (v) => `${v > 0 ? '+' : ''}${v} см`, (v) => { this.settings.seatForeAftCm = v; });
+    bindRange('set-seath', 'lbl-set-seath', (v) => `${v > 0 ? '+' : ''}${v} cm`, (v) => { this.settings.seatHeightCm = v; });
+    bindRange('set-seatfore', 'lbl-set-seathe', (v) => `${v > 0 ? '+' : ''}${v} cm`, (v) => { this.settings.seatForeAftCm = v; });
     bindRange('set-pitch', 'lbl-set-pitch', (v) => `${v > 0 ? '+' : ''}${v}°`, (v) => { this.settings.cameraPitchDeg = v; });
     bindRange('set-shake', 'lbl-set-shake', (v) => `${v}%`, (v) => { this.settings.cameraShakeIntensity = v; });
     bindRange('set-roll', 'lbl-set-roll', (v) => `${v}%`, (v) => { this.settings.horizonRollIntensity = v; });
@@ -530,7 +564,7 @@ export class ApexGPGame {
       if (!setRide || !setPsi) return;
       this.settings.customRideHeightMm = Number(setRide.value);
       this.settings.customTirePressurePsi = Number(setPsi.value);
-      if (lblRide) lblRide.textContent = `${this.settings.customRideHeightMm} мм / ${this.settings.customTirePressurePsi.toFixed(1)} PSI`;
+      if (lblRide) lblRide.textContent = `${this.settings.customRideHeightMm} mm / ${this.settings.customTirePressurePsi.toFixed(1)} PSI`;
     };
     setRide?.addEventListener('input', updateRidePsi);
     setPsi?.addEventListener('input', updateRidePsi);
@@ -583,7 +617,7 @@ export class ApexGPGame {
       this.settings = { ...DEFAULT_SETTINGS, mode: this.settings.mode, compound: this.settings.compound };
       syncSlidersUI(DEFAULT_SETTINGS.customWingLoad, DEFAULT_SETTINGS.customBrakeBias, DEFAULT_SETTINGS.customSuspStiff);
       this._applyQualityPreset(this.settings.quality);
-      this.hud.showBanner('НАСТРОЙКИ СБРОШЕНЫ / IMPOSTAZIONI RIPRISTINATE', 1300);
+      this.hud.showBanner(this.hud.t().bannerSettingsReset, 1300);
     });
   }
 
@@ -599,11 +633,14 @@ export class ApexGPGame {
       if (e.code === 'KeyM') {
         this.audio.init();
         const muted = this.audio.toggleMute();
-        document.getElementById('btn-mute-menu')!.textContent = muted ? '🔇 Audio OFF' : '🔊 Audio ON';
+        const tr = this.hud.t();
+        document.getElementById('btn-mute-menu')!.textContent = muted ? tr.audioOff : tr.audioOn;
         document.getElementById('btn-hud-mute')!.textContent = muted ? '🔇' : '🔊';
       } else if (e.code === 'KeyO') {
         const modal = document.getElementById('settings-modal');
         this.openSettingsModal(modal ? modal.classList.contains('hidden') : true);
+      } else if (e.code === 'KeyL') {
+        this.hud.toggleLanguage(this.audio.muted, this.settings.mode);
       }
     });
   }
@@ -611,23 +648,31 @@ export class ApexGPGame {
   private _cyclePlayerErsMode(): void {
     if (!this.player || this.mode !== 'RACE') return;
     const next = cycleERSMode(this.player);
-    this.hud.showBanner(`ERS MODE: ${ERS_MODE_SPECS[next].label}`, 1000);
+    const label = this.hud.t().ersModes[next] || ERS_MODE_SPECS[next].label;
+    this.hud.showBanner(`ERS MODE: ${label}`, 1000);
   }
 
   private _toggleVirtualHalo(): void {
     if (!this.playerVisual || this.mode !== 'RACE') return;
     this.settings.hideHalo = !this.settings.hideHalo;
     this.playerVisual.haloMesh.visible = !this.settings.hideHalo;
-    this.hud.showBanner(this.settings.hideHalo ? 'HALO: NASCOSTO' : 'HALO: VISIBILE', 950);
+    this.hud.showBanner(this.settings.hideHalo ? this.hud.t().bannerHaloHidden : this.hud.t().bannerHaloVisible, 950);
   }
 
   private _handleRadioQuery(topic: 1 | 2 | 3): void {
     if (!this.player || !this.track || this.mode !== 'RACE') return;
+    const tr = this.hud.t();
     this.audio.playRadioChime();
     if (topic === 1) {
       const wPct = Math.round(this.track.trackWetness * 100);
       this.hud.showRadio(
-        `Gomme al ${Math.round(this.player.tireWear)}% (Sup: ${Math.round(this.player.tireSurfaceTemp)}°C / Core: ${Math.round(this.player.tireCoreTemp)}°C). Pista ${Math.round(this.track.trackTempC)}°C, umidità ${wPct}%.`,
+        tr.radioTiresWeather(
+          Math.round(this.player.tireWear),
+          Math.round(this.player.tireSurfaceTemp),
+          Math.round(this.player.tireCoreTemp),
+          Math.round(this.track.trackTempC),
+          wPct
+        ),
         3800
       );
     } else if (topic === 2) {
@@ -637,8 +682,8 @@ export class ApexGPGame {
       const gap = ahead ? ((ahead.raceDistance - this.player.raceDistance) / Math.max(35, this.player.speed || 60)).toFixed(1) : '0.0';
       this.hud.showRadio(
         ahead
-          ? `Sei P${idx + 1}. Distacco da ${ahead.code} davanti: +${gap}s. Carburante: ${this.player.fuelKg.toFixed(1)}kg.`
-          : `Sei il LEADER della gara! Gestisci il passo, carburante: ${this.player.fuelKg.toFixed(1)}kg.`,
+          ? tr.radioGapChasing(idx + 1, ahead.code, gap, this.player.fuelKg.toFixed(1))
+          : tr.radioGapLeader(this.player.fuelKg.toFixed(1)),
         3800
       );
     } else {
@@ -691,6 +736,7 @@ export class ApexGPGame {
 
   private _requestPlayerPitStop(): void {
     if (!this.player || !this.track || this.mode !== 'RACE' || !this.raceActive || this.paused) return;
+    const tr = this.hud.t();
     const nextComp: TireCompoundId = this.track.trackWetness > 0.45 ? 'inter' : 'soft';
     if (triggerPitStop(this.player, nextComp)) {
       const visIdx = this.cars.indexOf(this.player);
@@ -704,10 +750,10 @@ export class ApexGPGame {
       this.track.pitCrewGroup.visible = true;
 
       this.audio.playRadioChime();
-      this.hud.showRadio('Box, box! Meccanici al lavoro: gomme nuove e ala riparata (2.4s)...', 2600);
+      this.hud.showRadio(tr.radioPitService, 2600);
     } else {
       this.audio.playRadioChime();
-      this.hud.showRadio('Box confermato! Premi [P] sul rettilineo dei box a velocità ridotta.', 2600);
+      this.hud.showRadio(tr.radioPitConfirm, 2600);
     }
   }
 
@@ -860,34 +906,36 @@ export class ApexGPGame {
     this.vscTimer = 0;
     this.cameraInitialized = false;
 
-    const sessionLabel = this.isQualifyingSession ? 'QUALIFICA Q3' : 'APEX GP';
+    const tr = this.hud.t();
+    const sessionLabel = this.isQualifyingSession ? tr.qualifyingTag : 'APEX GP';
     this.hud.prepareRaceMinimap(this.track, this.cars.length, sessionLabel);
     this.hud.showRaceHUD();
     this.hud.setReplayBadge(false);
     this.hud.setStartLights(0, this.track.gantryLights);
     this.hud.showBanner(
       this.isQualifyingSession
-        ? `${trackCfg.shortName} — QUALIFICA GIRO SECCO`
-        : `${trackCfg.shortName} — IN GRIGLIA (P${(this.cars.indexOf(this.player!) + 1)})`,
+        ? tr.bannerQualiStart(trackCfg.shortName)
+        : tr.bannerGridStart(trackCfg.shortName, this.cars.indexOf(this.player!) + 1),
       1500
     );
   }
 
   private _updateStartCountdown(dt: number): void {
     if (this.raceActive || !this.track) return;
+    const tr = this.hud.t();
     this.countdownTimer += dt;
     const launchPill = document.getElementById('launch-rpm-pill');
     if (launchPill && this.player) {
       launchPill.classList.remove('hidden');
       const rpm = Math.round(this.player.rpm);
       if (rpm >= 9200 && rpm <= 12200) {
-        launchPill.textContent = `🎯 LAUNCH RPM OTTIMALE (${rpm} RPM) — PRONTO!`;
+        launchPill.textContent = tr.launchOptimal(rpm);
         launchPill.className = 'status-pill pit';
       } else if (rpm > 12200) {
-        launchPill.textContent = `⚠ RPM TROPPO ALTO (${rpm} RPM) — RISCHIO WHEELSPIN!`;
+        launchPill.textContent = tr.launchTooHigh(rpm);
         launchPill.className = 'status-pill offtrack';
       } else {
-        launchPill.textContent = `🎯 TIENI ACCELERATORE A 9.500–12.000 RPM (${rpm} RPM)`;
+        launchPill.textContent = tr.launchHold(rpm);
         launchPill.className = 'status-pill slipstream';
       }
     }
@@ -904,10 +952,10 @@ export class ApexGPGame {
       this.hud.setStartLights('GO', this.track.gantryLights);
       const rpm = this.player ? this.player.rpm : 5000;
       const msg = rpm >= 9200 && rpm <= 12200
-        ? '🚀 LAUNCH CONTROL PERFETTO (+14% TRAZIONE)!'
+        ? tr.launchPerfectBanner
         : rpm > 12800
-          ? 'LIGHTS OUT — ⚠ PATTINAMENTO AL VIA!'
-          : 'LIGHTS OUT — VIA!';
+          ? tr.launchWheelspinBanner
+          : tr.launchGoBanner;
       this.hud.showBanner(msg, 1600);
       this.audio.playStartBeep(true);
       window.setTimeout(() => {
@@ -918,6 +966,7 @@ export class ApexGPGame {
 
   public _stepSimulation(dt: number): void {
     if (!this.track || !this.player) return;
+    const tr = this.hud.t();
     this._updateStartCountdown(dt);
     if (this.raceActive) this.raceClock += dt;
 
@@ -963,13 +1012,17 @@ export class ApexGPGame {
       stepCarPhysics(car, this.track, this.cars, this.raceActive, this.raceClock, this.settings, this.sessionBest, vscActive, dt);
     }
 
-    const colEvents = resolveCarCollisions(this.cars);
+    const dmgScale = this.settings.mode === 'time_attack' ? 0 : (this.settings.damageMult ?? 100) / 100;
+    const colEvents = resolveCarCollisions(this.cars, dmgScale);
     for (const ev of colEvents) {
-      this.vfx?.emitCollisionBurst(ev.pos, ev.intensity);
+      this.vfx?.emitCarCollisionVFX(ev);
       if (ev.involvesPlayer) {
         this.audio.playImpact(ev.intensity);
         this.impactShake = Math.max(this.impactShake, ev.intensity);
-        this.input.rumble(ev.intensity, ev.intensity * 0.7, 110);
+        this.input.rumble(ev.intensity, ev.intensity * 0.75, 120);
+        if (ev.intensity > 0.42) {
+          this.hud.showBanner(ev.type === 'rear_end' ? tr.bannerCollisionWing : tr.bannerCollisionRub, 1100);
+        }
       }
     }
 
@@ -1030,11 +1083,11 @@ export class ApexGPGame {
       this.currentLapTrace = [];
 
       if (this.player.lap === this.player.maxLaps && this.settings.mode !== 'time_attack') {
-        this.hud.showBanner('🔥 GIRO FINALE!', 2200);
+        this.hud.showBanner(tr.bannerFinalLap, 2200);
         this.audio.playRadioChime();
-        this.hud.showRadio('Ultimo giro! Usa tutto l’ERS rimasto in modalità SORPASSO [B]!');
+        this.hud.showRadio(tr.radioFinalLap);
       } else {
-        this.hud.showBanner(`GIRO ${this.player.lap} — ${formatTime(this.player.lastLapTime)}`, 1900);
+        this.hud.showBanner(`${tr.lapWord} ${this.player.lap} — ${formatTime(this.player.lastLapTime)}`, 1900);
       }
     }
 
@@ -1042,7 +1095,7 @@ export class ApexGPGame {
       this.prevBestLap = this.player.bestLapTime;
       if (this.player.lap > 1 && !this.player.finished) {
         this.audio.playRadioChime();
-        this.hud.showRadio(`⚡ Giro Veloce personale: ${formatTime(this.player.bestLapTime)}!`);
+        this.hud.showRadio(tr.radioFastestLap(formatTime(this.player.bestLapTime)));
       }
     }
 
@@ -1084,17 +1137,17 @@ export class ApexGPGame {
       this._saveDriverStats();
 
       let hasNext = false;
-      let nextLabel = 'PROSSIMA SESSIONE ▶';
+      let nextLabel = tr.finishNextSession;
       if (this.isQualifyingSession) {
         this.qualifiedGridSlot = playerPos - 1;
         hasNext = true;
-        nextLabel = `AVVIA GRAN PREMIO (PARTENZA P${playerPos}) ▶`;
+        nextLabel = tr.finishStartGP(playerPos);
       } else if (this.settings.mode === 'championship') {
         sorted.forEach((c, idx) => {
           this.champPoints[c.code] = (this.champPoints[c.code] || 0) + (FIA_POINTS[idx] || 0);
         });
         hasNext = this.champRound < TRACKS.length - 1;
-        nextLabel = 'PROSSIMA TAPPA CAMPIONATO ▶';
+        nextLabel = tr.finishNextChamp;
       }
 
       const wasQuali = this.isQualifyingSession;

@@ -1,5 +1,6 @@
 /**
- * APEX GP 3D — AAA F1 Broadcast HUD, Telemetry Trace Analyzer & Showroom UI Controller
+ * APEX GP 3D — AAA F1 Broadcast HUD, Bilingual IT/EN Controller,
+ * Interactive F1 Wiki / Academy & Telemetry Trace Analyzer
  */
 import * as THREE from 'three';
 import type {
@@ -7,12 +8,14 @@ import type {
   DriverProfileStats,
   GameSettings,
   RaceFlag,
+  SetupPresetId,
   TeamConfig,
   TelemetryTracePoint,
   TrackConfig,
   TrackData
 } from '../core/types';
 import { ERS_MODE_SPECS, TIRE_COMPOUNDS } from '../core/config';
+import { TRANSLATIONS, getSavedLanguage, saveLanguage, type I18nStrings, type Language } from '../core/i18n';
 
 export function formatTime(sec: number): string {
   if (!Number.isFinite(sec) || sec <= 0) return '--:--.---';
@@ -24,10 +27,14 @@ export function formatTime(sec: number): string {
 }
 
 export class HUDController {
+  public lang: Language = getSavedLanguage();
+  private activeWikiCatIdx = 0;
+
   private menuOverlay = document.getElementById('menu-overlay')!;
   private hudOverlay = document.getElementById('hud-overlay')!;
   private pauseModal = document.getElementById('pause-modal')!;
   private finishModal = document.getElementById('finish-modal')!;
+  private wikiModal = document.getElementById('wiki-modal')!;
 
   private teamListEl = document.getElementById('team-list')!;
   private trackListEl = document.getElementById('track-list')!;
@@ -95,6 +102,14 @@ export class HUDController {
   private radioTimeout: number | null = null;
   private lastLbUpdate = 0;
 
+  private cachedTeams: TeamConfig[] = [];
+  private cachedTracks: TrackConfig[] = [];
+  private cachedTeamIdx = 0;
+  private cachedTrackIdx = 0;
+  private cachedOnSelectTeam: ((idx: number) => void) | null = null;
+  private cachedOnSelectTrack: ((idx: number) => void) | null = null;
+  private cachedDriverStats: DriverProfileStats | null = null;
+
   constructor() {
     const rpmWrap = document.getElementById('rpm-leds')!;
     rpmWrap.innerHTML = '';
@@ -106,11 +121,281 @@ export class HUDController {
     }
   }
 
+  public t(): I18nStrings {
+    return TRANSLATIONS[this.lang];
+  }
+
+  public toggleLanguage(isMuted = false, currentMode = 'quick_race'): Language {
+    this.lang = this.lang === 'it' ? 'en' : 'it';
+    saveLanguage(this.lang);
+    this.applyLanguage(isMuted, currentMode);
+    return this.lang;
+  }
+
+  public applyLanguage(isMuted = false, currentMode = 'quick_race'): void {
+    const tr = this.t();
+    document.documentElement.lang = this.lang;
+
+    const setText = (id: string, val: string) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    // Header & Buttons
+    setText('btn-lang-toggle', tr.langToggleBtn);
+    setText('btn-wiki-lang', tr.langToggleBtn);
+    setText('btn-open-wiki-menu', tr.wikiBtnMenu);
+    setText('btn-open-wiki-pause', tr.wikiBtnPause);
+    setText('ui-subtitle', tr.subtitle);
+    setText('ui-zoom-hint', tr.zoomHint);
+    setText('btn-open-settings-menu', tr.settingsProBtn);
+    setText('btn-mute-menu', isMuted ? tr.audioOff : tr.audioOn);
+
+    // Left Panel
+    setText('ui-panel1-title', tr.panel1Title);
+    setText('ui-stat-speed', tr.statSpeed);
+    setText('ui-stat-accel', tr.statAccel);
+    setText('ui-stat-grip', tr.statGrip);
+    setText('ui-stat-aero', tr.statAero);
+    setText('ui-compound-label', tr.compoundLabel);
+    setText('ui-slider-wing', tr.sliderWing);
+    setText('ui-slider-brakes', tr.sliderBrakes);
+    setText('ui-slider-susp', tr.sliderSusp);
+    setText('ui-assist-line', tr.assistLine);
+    setText('ui-assist-manual', tr.assistManual);
+
+    const optSetup = document.getElementById('opt-setup') as HTMLSelectElement | null;
+    if (optSetup) {
+      Array.from(optSetup.options).forEach((opt) => {
+        const key = opt.value as SetupPresetId;
+        if (tr.setupPresets[key]) opt.textContent = tr.setupPresets[key];
+      });
+    }
+
+    // Right Panel
+    setText('ui-panel2-title', tr.panel2Title);
+    const modeMap: Record<string, string> = {
+      quick_race: tr.modeQuickRace,
+      weekend: tr.modeWeekend,
+      championship: tr.modeChamp,
+      time_attack: tr.modeTimeAttack
+    };
+    document.querySelectorAll('#mode-tabs .mode-btn').forEach((btn) => {
+      const m = (btn as HTMLElement).dataset.mode || '';
+      if (modeMap[m]) btn.textContent = modeMap[m];
+    });
+
+    setText('ui-meta-env', tr.metaEnv);
+    setText('ui-meta-session', tr.metaSession);
+    setText('ui-meta-layout', tr.metaLayout);
+    setText('ui-meta-rev', tr.metaReverse);
+    setText('ui-launch-btn', tr.launchBtn);
+
+    const setSelectOpts = (id: string, map: Record<string, string>) => {
+      const sel = document.getElementById(id) as HTMLSelectElement | null;
+      if (!sel) return;
+      Array.from(sel.options).forEach((opt) => {
+        if (map[opt.value]) opt.textContent = map[opt.value];
+      });
+    };
+
+    setSelectOpts('opt-weather', {
+      dry: tr.weatherDry,
+      overcast: tr.weatherOvercast,
+      rain: tr.weatherRain,
+      dynamic: tr.weatherDynamic
+    });
+    setSelectOpts('opt-difficulty', {
+      rookie: tr.diffRookie,
+      pro: tr.diffPro,
+      ace: tr.diffAce,
+      legend: tr.diffLegend
+    });
+    setSelectOpts('opt-quality', {
+      low: tr.qualLow,
+      medium: tr.qualMed,
+      high: tr.qualHigh,
+      ultra: tr.qualUltra
+    });
+
+    // HUD Static Labels
+    setText('ui-radio-title', tr.radioTitle);
+    setText('wrong-way-banner', tr.wrongWayBanner);
+    setText('badge-slipstream', tr.badgeSlipstream);
+    setText('badge-dirtyair', tr.badgeDirtyAir);
+    setText('badge-drs', tr.badgeDrsOpen);
+    setText('badge-pit', tr.badgePitAvail);
+    setText('badge-marbles', tr.badgeMarbles);
+    setText('badge-offtrack', tr.badgeTrackLimits);
+    setText('badge-replay', tr.badgeReplay);
+    setText('ui-time-lap', tr.timeLap);
+    setText('ui-time-best', tr.timeBest);
+    setText('ui-track-temp-lbl', tr.trackTempLabel);
+
+    // Pause Modal
+    setText('ui-pause-title', tr.pauseTitle);
+    setText('ui-pause-sub', tr.pauseSub);
+    setText('btn-resume', tr.pauseResume);
+    setText('btn-open-settings-pause', tr.pauseSettings);
+    setText('btn-restart', tr.pauseRestart);
+    setText('btn-back-menu', tr.pauseBackMenu);
+
+    // Finish Modal
+    setText('ui-tel-head', tr.finishTelemetryHead);
+    setText('btn-finish-replay', tr.finishReplayRace);
+    setText('btn-finish-menu', tr.finishBackShowroom);
+
+    // Pro Settings Modal
+    setText('ui-set-eyebrow', tr.setEyebrow);
+    setText('ui-set-title', tr.setTitle);
+    setText('btn-close-settings-top', tr.setCloseTop);
+    setText('ui-set-tab1', tr.setTab1);
+    setText('ui-set-tab2', tr.setTab2);
+    setText('ui-set-tab3', tr.setTab3);
+    setText('ui-set-tab4', tr.setTab4);
+    setText('ui-set-tab5', tr.setTab5);
+    setText('ui-set-res', tr.setRes);
+    setText('ui-set-shadows', tr.setShadows);
+    setSelectOpts('set-shadows', {
+      off: tr.setShadowOff,
+      '1024': tr.setShadowMed,
+      '2048': tr.setShadowHigh,
+      '4096': tr.setShadowUltra
+    });
+    setText('ui-set-env', tr.setEnv);
+    setText('ui-set-bloom', tr.setBloom);
+    setText('ui-set-exp', tr.setExp);
+    setText('ui-set-vig', tr.setVig);
+    setText('ui-set-smaa', tr.setSmaa);
+    setText('ui-set-gov', tr.setGov);
+    setText('ui-set-fov', tr.setFov);
+    setText('ui-set-speedfov', tr.setSpeedFov);
+    setText('ui-set-seath', tr.setSeatH);
+    setText('ui-set-seatfore', tr.setSeatFore);
+    setText('ui-set-pitch', tr.setPitch);
+    setText('ui-set-shake', tr.setShake);
+    setText('ui-set-roll', tr.setRoll);
+    setText('ui-set-haloradar', tr.setHaloRadar);
+    setText('ui-set-nohalo', tr.setNoHalo);
+    setText('ui-set-radar360', tr.setRadar360);
+    setText('ui-set-fwing', tr.setFWing);
+    setText('ui-set-rwing', tr.setRWing);
+    setText('ui-set-bbias', tr.setBBias);
+    setText('ui-set-bpress', tr.setBPress);
+    setText('ui-set-diffon', tr.setDiffOn);
+    setText('ui-set-diffoff', tr.setDiffOff);
+    setText('ui-set-susp', tr.setSusp);
+    setText('ui-set-ridepsi', tr.setRidePsi);
+    setText('ui-set-sens', tr.setSens);
+    setText('ui-set-lin', tr.setLin);
+    setText('ui-set-dz', tr.setDz);
+    setText('ui-set-ffb', tr.setFfb);
+    setText('ui-set-bassist', tr.setBAssist);
+    setSelectOpts('set-bassist', {
+      off: tr.setBAssistOff,
+      low: tr.setBAssistLow,
+      high: tr.setBAssistHigh
+    });
+    setText('ui-set-tclbl', tr.setTcLabel);
+    setText('ui-set-absgear', tr.setAbsGearbox);
+    setText('ui-set-mangear', tr.setManualGear);
+    setText('ui-set-line3d', tr.setLine3D);
+    setText('ui-set-vol', tr.setVol);
+    setText('ui-set-ailevel', tr.setAiLevel);
+    setText('ui-set-aiagg', tr.setAiAgg);
+    setText('ui-set-dmg', tr.setDmg);
+    setText('ui-set-wear', tr.setWear);
+    setText('ui-set-fuel', tr.setFuel);
+    setText('ui-set-limits', tr.setLimits);
+    setSelectOpts('set-limits', {
+      off: tr.setLimitsOff,
+      standard: tr.setLimitsStd,
+      strict: tr.setLimitsStrict
+    });
+    setText('ui-set-tod', tr.setTod);
+    setText('btn-reset-settings', tr.setResetBtn);
+    setText('btn-close-settings', tr.setApplyBtn);
+
+    // Wiki Modal
+    setText('ui-wiki-eyebrow', tr.wikiEyebrow);
+    setText('ui-wiki-title', tr.wikiTitle);
+    setText('ui-wiki-sub', tr.wikiSub);
+    setText('btn-close-wiki-top', tr.wikiCloseBtn);
+    this.renderWikiModal(this.activeWikiCatIdx);
+
+    if (this.cachedDriverStats) {
+      this.updateLicenseUI(this.cachedDriverStats);
+    }
+    if (this.cachedTeams.length && this.cachedTracks.length && this.cachedOnSelectTeam && this.cachedOnSelectTrack) {
+      this.initMenu(
+        this.cachedTeams,
+        this.cachedTracks,
+        this.cachedTeamIdx,
+        this.cachedTrackIdx,
+        this.cachedOnSelectTeam,
+        this.cachedOnSelectTrack
+      );
+      const lapsEl = document.getElementById('meta-laps');
+      if (lapsEl) {
+        const trackLaps = this.cachedTracks[this.cachedTrackIdx].laps;
+        lapsEl.textContent = currentMode === 'weekend'
+          ? tr.lapsWeekend
+          : currentMode === 'time_attack'
+          ? tr.lapsFree
+          : `${trackLaps} ${tr.lapsUnit}`;
+      }
+    }
+  }
+
+  public renderWikiModal(catIdx = 0): void {
+    const tr = this.t();
+    const cats = tr.wikiCategories;
+    this.activeWikiCatIdx = Math.max(0, Math.min(cats.length - 1, catIdx));
+
+    const tabsEl = document.getElementById('wiki-tabs');
+    const gridEl = document.getElementById('wiki-content-grid');
+    if (!tabsEl || !gridEl) return;
+
+    tabsEl.innerHTML = '';
+    cats.forEach((cat, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'wiki-tab-btn' + (idx === this.activeWikiCatIdx ? ' active' : '');
+      btn.textContent = cat.tabLabel;
+      btn.addEventListener('click', () => this.renderWikiModal(idx));
+      tabsEl.appendChild(btn);
+    });
+
+    const activeCat = cats[this.activeWikiCatIdx];
+    gridEl.innerHTML = activeCat.articles
+      .map(
+        (art) => `
+        <article class="wiki-card">
+          <span class="wiki-card-badge" style="color:${art.badgeColor}">${art.badge}</span>
+          <h3>${art.title}</h3>
+          <div class="wiki-card-sub">${art.subtitle}</div>
+          ${art.svgDiagram ? art.svgDiagram : ''}
+          <div class="wiki-card-body">${art.body}</div>
+          <div class="wiki-pro-tip">💡 <strong>PRO TIP:</strong> ${art.proTip}</div>
+        </article>
+      `
+      )
+      .join('');
+    gridEl.scrollTop = 0;
+  }
+
+  public openWikiModal(open = true): void {
+    if (!this.wikiModal) return;
+    if (open) this.renderWikiModal(this.activeWikiCatIdx);
+    this.wikiModal.classList.toggle('hidden', !open);
+  }
+
   updateLicenseUI(stats: DriverProfileStats): void {
+    this.cachedDriverStats = stats;
     const el = document.getElementById('license-pill');
     if (!el) return;
+    const tr = this.t();
     const grade = stats.safetyRating >= 90 ? 'S' : stats.safetyRating >= 78 ? 'A' : stats.safetyRating >= 65 ? 'B' : 'C';
-    el.textContent = `🪪 LICENZA ${grade} (${Math.round(stats.safetyRating)}%) • ${Math.round(stats.skillRating)} SR • ${stats.wins}🏆`;
+    el.textContent = `${tr.licensePrefix} ${grade} (${Math.round(stats.safetyRating)}%) • ${Math.round(stats.skillRating)} SR • ${stats.wins}🏆`;
   }
 
   initMenu(
@@ -121,8 +406,17 @@ export class HUDController {
     onSelectTeam: (idx: number) => void,
     onSelectTrack: (idx: number) => void
   ): void {
+    this.cachedTeams = teams;
+    this.cachedTracks = tracks;
+    this.cachedTeamIdx = selectedTeamIdx;
+    this.cachedTrackIdx = selectedTrackIdx;
+    this.cachedOnSelectTeam = onSelectTeam;
+    this.cachedOnSelectTrack = onSelectTrack;
+
+    const tr = this.t();
     this.teamListEl.innerHTML = '';
     teams.forEach((team, idx) => {
+      const tagline = tr.teamTaglines[team.id] || team.tagline;
       const card = document.createElement('div');
       card.className = 'team-card' + (idx === selectedTeamIdx ? ' active' : '');
       card.style.setProperty('--team-color', team.secondaryColor === '#111111' ? team.primaryColor : team.secondaryColor);
@@ -130,7 +424,7 @@ export class HUDController {
         <div class="team-swatch" style="background: linear-gradient(180deg, ${team.primaryColor}, ${team.secondaryColor})"></div>
         <div class="team-info">
           <strong>${team.name}</strong>
-          <small>${team.tagline}</small>
+          <small>${tagline}</small>
         </div>
         <span class="team-num">#${team.number}</span>
       `;
@@ -140,14 +434,16 @@ export class HUDController {
 
     this.trackListEl.innerHTML = '';
     tracks.forEach((track, idx) => {
+      const badge = tr.trackBadges[track.id] || track.badge;
+      const desc = tr.trackDescs[track.id] || track.description;
       const card = document.createElement('div');
       card.className = 'track-card' + (idx === selectedTrackIdx ? ' active' : '');
       card.innerHTML = `
         <div class="track-card-top">
           <strong>${track.name}</strong>
-          <span class="track-badge">${track.badge}</span>
+          <span class="track-badge">${badge}</span>
         </div>
-        <small>${track.description}</small>
+        <small>${desc}</small>
       `;
       card.addEventListener('click', () => onSelectTrack(idx));
       this.trackListEl.appendChild(card);
@@ -158,10 +454,12 @@ export class HUDController {
   }
 
   updateSelectedTeamUI(team: TeamConfig, activeIdx: number): void {
+    this.cachedTeamIdx = activeIdx;
+    const tr = this.t();
     Array.from(this.teamListEl.children).forEach((el, i) => el.classList.toggle('active', i === activeIdx));
     document.getElementById('spec-number')!.textContent = `#${team.number}`;
     document.getElementById('spec-team-name')!.textContent = team.name;
-    document.getElementById('spec-tagline')!.textContent = team.tagline;
+    document.getElementById('spec-tagline')!.textContent = tr.teamTaglines[team.id] || team.tagline;
     document.getElementById('val-speed')!.textContent = String(team.uiStats.speed);
     document.getElementById('val-accel')!.textContent = String(team.uiStats.accel);
     document.getElementById('val-grip')!.textContent = String(team.uiStats.grip);
@@ -173,9 +471,11 @@ export class HUDController {
   }
 
   updateSelectedTrackUI(trackCfg: TrackConfig, activeIdx: number): void {
+    this.cachedTrackIdx = activeIdx;
+    const tr = this.t();
     Array.from(this.trackListEl.children).forEach((el, i) => el.classList.toggle('active', i === activeIdx));
-    document.getElementById('meta-env')!.textContent = trackCfg.environment;
-    document.getElementById('meta-laps')!.textContent = `${trackCfg.laps} Giri`;
+    document.getElementById('meta-env')!.textContent = tr.trackEnvs[trackCfg.id] || trackCfg.environment;
+    document.getElementById('meta-laps')!.textContent = `${trackCfg.laps} ${tr.lapsUnit}`;
 
     const ctrl = trackCfg.points.map(([x, y, z]) => new THREE.Vector3(x, y, z));
     const curve = new THREE.CatmullRomCurve3(ctrl, true, 'centripetal', 0.5);
@@ -252,6 +552,7 @@ export class HUDController {
     this.hudOverlay.classList.add('hidden');
     this.pauseModal.classList.add('hidden');
     this.finishModal.classList.add('hidden');
+    this.wikiModal?.classList.add('hidden');
   }
 
   showRaceHUD(): void {
@@ -259,6 +560,7 @@ export class HUDController {
     this.hudOverlay.classList.remove('hidden');
     this.pauseModal.classList.add('hidden');
     this.finishModal.classList.add('hidden');
+    this.wikiModal?.classList.add('hidden');
   }
 
   setPaused(paused: boolean): void {
@@ -316,6 +618,7 @@ export class HUDController {
     nowMs: number,
     settings: GameSettings
   ): void {
+    const tr = this.t();
     const kmh = Math.max(0, Math.round(Math.abs(player.speed) * 3.6));
     this.speedEl.textContent = String(kmh);
     this.gearEl.textContent = player.gear === -1 ? 'R' : player.gear === 0 ? 'N' : String(player.gear);
@@ -338,45 +641,46 @@ export class HUDController {
 
     const ersPct = Math.round(player.ersEnergy);
     const ersSpec = ERS_MODE_SPECS[player.ersMode];
-    this.ersModeEl.textContent = ersSpec.label.slice(0, 4);
+    const ersLabel = tr.ersModes[player.ersMode] || ersSpec.label;
+    this.ersModeEl.textContent = ersLabel.slice(0, 4);
     this.ersModeEl.style.color = ersSpec.color;
     this.drsPctEl.textContent = `${ersPct}%`;
     this.drsFillEl.style.width = `${ersPct}%`;
     this.drsFillEl.className = 'drs-fill' + (player.ersActive ? ' deploy' : player.ersHarvesting ? ' harvest' : '');
 
     if (player.drsActive) {
-      this.drsStatusEl.textContent = 'DRS APERTO';
+      this.drsStatusEl.textContent = tr.drsOpen;
       this.drsStatusEl.className = 'drs-pill active';
     } else if (player.drsAvailable) {
-      this.drsStatusEl.textContent = 'DRS [SHIFT]';
+      this.drsStatusEl.textContent = tr.drsReady;
       this.drsStatusEl.className = 'drs-pill ready';
     } else {
-      this.drsStatusEl.textContent = 'DRS CHIUSO';
+      this.drsStatusEl.textContent = tr.drsClosed;
       this.drsStatusEl.className = 'drs-pill';
     }
 
     // FIA Flag Pill
     if (raceFlag === 'VSC') {
       this.fiaFlagEl.className = 'fia-flag vsc';
-      this.fiaFlagEl.textContent = '🟠 VSC • VIRTUAL SAFETY CAR (MAX 195 KM/H)';
+      this.fiaFlagEl.textContent = tr.flagVsc;
     } else if (raceFlag === 'YELLOW') {
       this.fiaFlagEl.className = 'fia-flag yellow';
-      this.fiaFlagEl.textContent = '🟡 BANDIERA GIALLA • PERICOLO IN PISTA';
+      this.fiaFlagEl.textContent = tr.flagYellow;
     } else {
       this.fiaFlagEl.className = 'fia-flag green';
       this.fiaFlagEl.textContent = track.trackWetness > 0.45
-        ? `🌧️ PISTA BAGNATA (${Math.round(track.trackWetness * 100)}%) • DRS DISABILITATO`
-        : '🟢 BANDIERA VERDE • PISTA LIBERA';
+        ? tr.flagWet(Math.round(track.trackWetness * 100))
+        : tr.flagGreen;
     }
 
     // Position, Laps, Sectors & Multi-Layer Tire/Fuel Widget
     const playerPos = sortedCars.indexOf(player) + 1;
     this.posEl.textContent = String(playerPos);
     this.lapPillEl.textContent = isQualifying
-      ? 'QUALIFICA Q3'
+      ? tr.qualifyingTag
       : settings.mode === 'time_attack'
-      ? `GIRO ${player.lap}`
-      : `GIRO ${Math.min(player.lap, player.maxLaps)} / ${player.maxLaps}`;
+      ? `${tr.lapWord} ${player.lap}`
+      : `${tr.lapWord} ${Math.min(player.lap, player.maxLaps)} / ${player.maxLaps}`;
     this.lapTimeEl.textContent = formatTime(player.currentLapTime);
     this.bestTimeEl.textContent = formatTime(player.bestLapTime);
     this.camModeEl.textContent = camMode;
@@ -405,8 +709,8 @@ export class HUDController {
     }
 
     this.wingWarnEl.classList.toggle('hidden', player.wingDamage < 0.2 && !player.puncture);
-    if (player.puncture) this.wingWarnEl.textContent = '⚠ FORATURA! RIENTRA AI BOX [P]';
-    else this.wingWarnEl.textContent = '⚠ DANNO AERO — BOX [P]';
+    if (player.puncture) this.wingWarnEl.textContent = tr.wingWarnPuncture;
+    else this.wingWarnEl.textContent = tr.wingWarnAero;
 
     this.wrongWayEl.classList.toggle('hidden', !player.wrongWay);
     this.badgeSlipEl.classList.toggle('hidden', player.slipstream < 0.25);
@@ -463,7 +767,6 @@ export class HUDController {
     const endAng = startAng + totalSweep;
     const rArc = 83;
 
-    // 1. Subtle background track arc + crimson redline zone (82%..100%)
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.arc(cx, cy, rArc, startAng, endAng);
@@ -478,7 +781,6 @@ export class HUDController {
     ctx.lineWidth = 6.5;
     ctx.stroke();
 
-    // 2. Active glowing RPM sweep arc + analog needle
     const rpmNorm = THREE.MathUtils.clamp((player.rpm - 3800) / 11200, 0, 1);
     const needleAng = startAng + totalSweep * rpmNorm;
 
@@ -494,7 +796,6 @@ export class HUDController {
       ctx.stroke();
     }
 
-    // 3. Precision tick marks & numeric x1000 RPM labels (0..15)
     ctx.font = '800 8.5px "Segoe UI", system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -520,7 +821,6 @@ export class HUDController {
       }
     }
 
-    // 4. Inner Throttle (right green arc) & Brake (left crimson arc) telemetry bars
     if (player.throttleInput > 0.02) {
       const thSweep = player.throttleInput * 0.65;
       ctx.beginPath();
@@ -538,7 +838,6 @@ export class HUDController {
       ctx.stroke();
     }
 
-    // 5. Crisp illuminated analog tachometer needle
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(needleAng);
@@ -606,7 +905,6 @@ export class HUDController {
     ctx.clearRect(0, 0, w, h);
     ctx.save();
 
-    // Subtle circular compass radar rings
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(w * 0.5, h * 0.5, w * 0.44, 0, Math.PI * 2); ctx.stroke();
@@ -621,7 +919,6 @@ export class HUDController {
     });
     ctx.closePath();
     ctx.lineJoin = 'round';
-    // Dark road casing + Forza Horizon glowing cyan route line (#00e5ff)
     ctx.strokeStyle = 'rgba(8, 14, 24, 0.72)';
     ctx.lineWidth = 8.0;
     ctx.stroke();
@@ -646,7 +943,6 @@ export class HUDController {
         : c.team.id === 'redbull' ? '#ffd300'
         : c.team.primaryColor;
       if (c.isPlayer) {
-        // Crisp directional player chevron arrow in white + cyan halo!
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(Math.atan2(Math.sin(c.yaw), Math.cos(c.yaw)) - Math.PI * 0.5);
@@ -670,16 +966,13 @@ export class HUDController {
     ctx.restore();
   }
 
-  /**
-   * Renders the Post-Race Telemetry Analyzer Graph (Speed in Cyan, Throttle in Green, Brake in Red).
-   */
   renderTelemetryTrace(trace: TelemetryTracePoint[]): void {
+    const tr = this.t();
     const ctx = this.traceCtx;
     const w = this.traceCanvas.width;
     const h = this.traceCanvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    // Background grid
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 1;
     for (let y = 18; y < h; y += 22) {
@@ -689,7 +982,7 @@ export class HUDController {
     if (trace.length < 2) {
       ctx.fillStyle = '#93a0b8';
       ctx.font = '700 11px Consolas, monospace';
-      ctx.fillText('Nessuna traccia telemetrica disponibile', 14, h * 0.5);
+      ctx.fillText(tr.finishNoTelemetry, 14, h * 0.5);
       return;
     }
 
@@ -706,7 +999,6 @@ export class HUDController {
       ctx.stroke();
     };
 
-    // Throttle (Green), Brake (Red), Speed (Cyan)
     drawCurve('rgba(34, 229, 107, 0.55)', 1.5, (p) => p.throttle / 100);
     drawCurve('rgba(255, 43, 43, 0.65)', 1.5, (p) => p.brake / 100);
     drawCurve('#00e5ff', 2.2, (p) => p.kmh / 350);
@@ -723,18 +1015,17 @@ export class HUDController {
     champPointsMap?: Record<string, number>;
   }): void {
     const { sortedCars, player, trackName, isQualifyingResult, hasNextAction, nextActionLabel, trace, champPointsMap } = params;
+    const tr = this.t();
     const pos = sortedCars.indexOf(player) + 1;
 
     document.getElementById('finish-eyebrow')!.textContent = isQualifyingResult
-      ? 'QUALIFICHE Q3 COMPLETATE — GRIGLIA DI PARTENZA'
-      : 'BANDIERA A SCACCHI';
+      ? tr.finishEyebrowQuali
+      : tr.finishEyebrowRace;
 
-    const titles: Record<number, string> = isQualifyingResult
-      ? { 1: '⚡ POLE POSITION — P1 IN GRIGLIA!', 2: '🔥 PRIMA FILA — P2 IN GRIGLIA!', 3: '🏁 SECONDA FILA — P3 IN GRIGLIA!' }
-      : { 1: '🏆 1° POSTO — VITTORIA!', 2: '🥈 2° POSTO — PODIO!', 3: '🥉 3° POSTO — PODIO!' };
-
-    document.getElementById('finish-title')!.textContent = titles[pos] || `${pos}° POSTO — ${isQualifyingResult ? 'GRIGLIA DEFINITA' : 'GARA COMPLETATA'}`;
-    document.getElementById('finish-subtitle')!.textContent = `${trackName} • Miglior Giro: ${formatTime(player.bestLapTime)}`;
+    const titles = isQualifyingResult ? tr.finishQualiTitles : tr.finishRaceTitles;
+    document.getElementById('finish-title')!.textContent =
+      titles[pos] || (isQualifyingResult ? tr.finishQualiGeneric(pos) : tr.finishRaceGeneric(pos));
+    document.getElementById('finish-subtitle')!.textContent = `${trackName} • ${tr.finishBestLap}: ${formatTime(player.bestLapTime)}`;
 
     const nextBtn = document.getElementById('btn-finish-next')!;
     nextBtn.textContent = nextActionLabel;
@@ -746,12 +1037,12 @@ export class HUDController {
         const barColor = c.team.id === 'monster' ? '#39ff14' : c.team.id === 'mercedes' ? '#00d2be' : c.team.primaryColor;
         const ptsStr = champPointsMap ? ` • <strong>${champPointsMap[c.code] ?? 0} pt</strong>` : '';
         const penStr = c.timePenaltySec > 0 ? ` (+${c.timePenaltySec}s)` : '';
-        const timeStr = c.finished ? formatTime(c.finishTime) + penStr : `Giro ${c.lap}/${c.maxLaps}`;
+        const timeStr = c.finished ? formatTime(c.finishTime) + penStr : `${tr.lapWord} ${c.lap}/${c.maxLaps}`;
         return `
           <div class="fin-row ${c.isPlayer ? 'is-player' : ''}">
             <span>${idx + 1}°</span>
             <span style="background:${barColor}; height:16px; border-radius:2px;"></span>
-            <span>${c.team.shortName} <strong>#${c.number} ${c.code}</strong> ${c.isPlayer ? '(TU)' : ''}${ptsStr}</span>
+            <span>${c.team.shortName} <strong>#${c.number} ${c.code}</strong> ${c.isPlayer ? tr.finishYou : ''}${ptsStr}</span>
             <span class="fin-time">${timeStr}</span>
           </div>
         `;

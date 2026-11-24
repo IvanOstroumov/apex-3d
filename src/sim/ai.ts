@@ -156,6 +156,10 @@ export function updateAIDriver(
   const targetSteer = THREE.MathUtils.clamp(angleDiff * steerGain, -1, 1);
   car.steerInput += (targetSteer - car.steerInput) * Math.min(1, dt * 18);
 
+  if (car.aiMistakeTimer > 0) {
+    car.aiMistakeTimer = Math.max(0, car.aiMistakeTimer - dt);
+  }
+
   // 4. Longitudinal Speed Control (never engages reverse gear)
   const speedErr = car.speed - targetSpeed;
   if (car.speed < 4.0) {
@@ -169,7 +173,8 @@ export function updateAIDriver(
     car.brakeInput = 0;
   } else {
     const steerMod = car.speed < 44 ? Math.abs(car.steerInput) * 0.30 : 0;
-    car.throttleInput = THREE.MathUtils.clamp(1.0 - steerMod, 0.58, 1.0);
+    const recoverMod = car.aiMistakeTimer > 0 ? 0.32 : 0;
+    car.throttleInput = THREE.MathUtils.clamp(1.0 - steerMod - recoverMod, 0.45, 1.0);
     car.brakeInput = 0;
   }
 

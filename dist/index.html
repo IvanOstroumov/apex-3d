@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>APEX GP 3D — AAA Formula 1 Simulator (240Hz)</title>
-  <script type="module" crossorigin src="./assets/index-D1QGuCX_.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DcldJlwE.css">
+  <script type="module" crossorigin src="./assets/index-BIYOv74Q.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-BghdVbI9.css">
 </head>
 <body>
   <div id="canvas-container"></div>
@@ -19,14 +19,16 @@
         <span class="brand-badge">F1</span>
         <div>
           <h1>APEX GP <span class="accent">3D</span> <span class="aaa-chip">240HZ AAA ENGINE</span></h1>
-          <p class="subtitle">MULTI-LAYER TIRES • GROUND EFFECT • HDR BLOOM • 60+ FPS</p>
+          <p id="ui-subtitle" class="subtitle">GOMME MULTI-STRATO • EFFETTO SUOLO • HDR BLOOM • 60+ FPS</p>
         </div>
       </div>
       <div class="header-hints">
         <span id="license-pill" class="hint-pill license-tag" title="Patente Pilota FIA (Safety &amp; Skill Rating)">🪪 LICENZA S • 1500 SR</span>
-        <span class="hint-pill">🖱️ 360° • Zoom</span>
+        <span id="ui-zoom-hint" class="hint-pill">🖱️ 360° • Zoom</span>
         <span id="gamepad-pill" class="hint-pill hidden">🎮 Gamepad</span>
-        <button id="btn-open-settings-menu" class="icon-btn settings-pro-btn" title="Настройки Симулятора / Impostazioni Avanzate (O)">⚙️ НАСТРОЙКИ PRO</button>
+        <button id="btn-open-wiki-menu" class="icon-btn wiki-btn" title="Enciclopedia &amp; Guida Meccaniche F1 (W)">📖 WIKI F1</button>
+        <button id="btn-open-settings-menu" class="icon-btn settings-pro-btn" title="Impostazioni Avanzate Simulatore (O)">⚙️ IMPOSTAZIONI PRO</button>
+        <button id="btn-lang-toggle" class="icon-btn lang-btn" title="Cambia Lingua / Switch Language (IT / EN)">🇮🇹 IT</button>
         <button id="btn-mute-menu" class="icon-btn" title="Attiva/Disattiva Audio (M)">🔊 Audio ON</button>
       </div>
     </header>
@@ -36,7 +38,7 @@
       <aside class="panel panel-left">
         <div class="panel-title">
           <span class="step-num">01</span>
-          <h2>SCUDERIA &amp; INGEGNERE ASSETTO</h2>
+          <h2 id="ui-panel1-title">SCUDERIA &amp; INGEGNERE ASSETTO</h2>
         </div>
 
         <div id="team-list" class="team-list"></div>
@@ -51,26 +53,26 @@
           </div>
           <div class="stats-grid">
             <div class="stat-row">
-              <div class="stat-label"><span>VELOCITÀ</span><span id="val-speed">95</span></div>
+              <div class="stat-label"><span id="ui-stat-speed">VELOCITÀ</span><span id="val-speed">95</span></div>
               <div class="stat-bar"><div id="bar-speed" class="stat-fill"></div></div>
             </div>
             <div class="stat-row">
-              <div class="stat-label"><span>ACCEL.</span><span id="val-accel">97</span></div>
+              <div class="stat-label"><span id="ui-stat-accel">ACCEL.</span><span id="val-accel">97</span></div>
               <div class="stat-bar"><div id="bar-accel" class="stat-fill"></div></div>
             </div>
             <div class="stat-row">
-              <div class="stat-label"><span>GRIP</span><span id="val-grip">93</span></div>
+              <div class="stat-label"><span id="ui-stat-grip">GRIP</span><span id="val-grip">93</span></div>
               <div class="stat-bar"><div id="bar-grip" class="stat-fill"></div></div>
             </div>
             <div class="stat-row">
-              <div class="stat-label"><span>AERO/DRS</span><span id="val-boost">93</span></div>
+              <div class="stat-label"><span id="ui-stat-aero">AERO/DRS</span><span id="val-boost">93</span></div>
               <div class="stat-bar"><div id="bar-boost" class="stat-fill"></div></div>
             </div>
           </div>
         </div>
 
         <div class="setup-row">
-          <span class="setup-label">MESCOLA</span>
+          <span id="ui-compound-label" class="setup-label">MESCOLA</span>
           <div id="compound-pills" class="pill-group">
             <button class="pill-btn active" data-compound="soft" style="--pill-c:#ff2424">S</button>
             <button class="pill-btn" data-compound="medium" style="--pill-c:#ffd200">M</button>
@@ -89,23 +91,23 @@
 
         <div class="setup-sliders-grid">
           <label class="slider-cell" title="Carico Aerodinamico Ali (1 = Scarico Monza, 50 = Massimo Carico)">
-            <div class="slider-head"><span>ALA</span><strong id="val-wing-slider">25</strong></div>
+            <div class="slider-head"><span id="ui-slider-wing">ALA</span><strong id="val-wing-slider">25</strong></div>
             <input type="range" id="opt-wing-slider" min="1" max="50" value="25" />
           </label>
           <label class="slider-cell" title="Ripartizione Frenata Anteriore (52% - 64%)">
-            <div class="slider-head"><span>FRENI</span><strong id="val-bias-slider">57%</strong></div>
+            <div class="slider-head"><span id="ui-slider-brakes">FRENI</span><strong id="val-bias-slider">57%</strong></div>
             <input type="range" id="opt-bias-slider" min="52" max="64" value="57" />
           </label>
           <label class="slider-cell" title="Rigidità Sospensioni &amp; Altezza Fondo (1 - 20)">
-            <div class="slider-head"><span>SOSP.</span><strong id="val-susp-slider">10</strong></div>
+            <div class="slider-head"><span id="ui-slider-susp">SOSP.</span><strong id="val-susp-slider">10</strong></div>
             <input type="range" id="opt-susp-slider" min="1" max="20" value="10" />
           </label>
         </div>
 
         <div class="assists-grid">
-          <label class="toggle-chip"><input type="checkbox" id="opt-abs" checked /> ABS</label>
-          <label class="toggle-chip"><input type="checkbox" id="opt-line" checked /> Linea 3D</label>
-          <label class="toggle-chip"><input type="checkbox" id="opt-manual" /> Cambio Man.</label>
+          <label class="toggle-chip"><input type="checkbox" id="opt-abs" checked /> <span>ABS</span></label>
+          <label class="toggle-chip"><input type="checkbox" id="opt-line" checked /> <span id="ui-assist-line">Linea 3D</span></label>
+          <label class="toggle-chip"><input type="checkbox" id="opt-manual" /> <span id="ui-assist-manual">Cambio Man.</span></label>
           <select id="opt-tc" class="mini-select" title="Traction Control">
             <option value="off">TC: OFF</option>
             <option value="med" selected>TC: MED</option>
@@ -118,7 +120,7 @@
       <aside class="panel panel-right">
         <div class="panel-title">
           <span class="step-num">02</span>
-          <h2>MODALITÀ &amp; CIRCUITO</h2>
+          <h2 id="ui-panel2-title">MODALITÀ &amp; CIRCUITO</h2>
         </div>
 
         <div id="mode-tabs" class="mode-tabs">
@@ -133,9 +135,9 @@
         <div class="track-preview-card">
           <canvas id="track-preview-canvas" width="240" height="78"></canvas>
           <div class="track-meta">
-            <div><span class="meta-k">AMBIENTE</span><span id="meta-env" class="meta-v">Diurno</span></div>
-            <div><span class="meta-k">SESSIONE</span><span id="meta-laps" class="meta-v">3 Giri</span></div>
-            <div><span class="meta-k">LAYOUT</span><label class="rev-label"><input type="checkbox" id="opt-reverse" /> Invertito</label></div>
+            <div><span id="ui-meta-env" class="meta-k">AMBIENTE</span><span id="meta-env" class="meta-v">Diurno</span></div>
+            <div><span id="ui-meta-session" class="meta-k">SESSIONE</span><span id="meta-laps" class="meta-v">3 Giri</span></div>
+            <div><span id="ui-meta-layout" class="meta-k">LAYOUT</span><label class="rev-label"><input type="checkbox" id="opt-reverse" /> <span id="ui-meta-rev">Invertito</span></label></div>
           </div>
         </div>
 
@@ -161,7 +163,7 @@
         </div>
 
         <button id="btn-start-race" class="btn-primary-launch">
-          <span>SCENDI IN PISTA</span>
+          <span id="ui-launch-btn">SCENDI IN PISTA</span>
           <span class="launch-arrow">▶</span>
         </button>
       </aside>
@@ -194,7 +196,7 @@
       <div id="launch-rpm-pill" class="status-pill slipstream hidden">🎯 LAUNCH CONTROL: TIENI 9.500–11.800 RPM</div>
       <div id="race-banner" class="race-banner hidden">LIGHTS OUT!</div>
       <div id="radio-toast" class="radio-toast hidden">
-        <div class="radio-head"><span>📻 INGEGNERE DI PISTA</span><span class="radio-wave">▮▯▮▮▯▮</span></div>
+        <div class="radio-head"><span id="ui-radio-title">📻 INGEGNERE DI PISTA</span><span class="radio-wave">▮▯▮▮▯▮</span></div>
         <div id="radio-msg" class="radio-msg">Box this lap for fresh Softs.</div>
       </div>
       <div id="wrong-way-banner" class="wrong-way hidden">⚠ SENSO CONTRARIO — PREMI R</div>
@@ -219,11 +221,11 @@
 
       <div class="timing-box">
         <div class="time-row">
-          <span class="time-k">GIRO</span>
+          <span id="ui-time-lap" class="time-k">GIRO</span>
           <span id="hud-lap-time" class="time-v">00:00.000</span>
         </div>
         <div class="time-row">
-          <span class="time-k">MIGLIORE</span>
+          <span id="ui-time-best" class="time-k">MIGLIORE</span>
           <span id="hud-best-time" class="time-v best">--:--.---</span>
         </div>
         <div class="sectors-row">
@@ -238,7 +240,7 @@
         </div>
         <div class="fuel-meta-row">
           <span>⛽ <strong id="hud-fuel">8.5 kg</strong></span>
-          <span>🌡️ PISTA <strong id="hud-track-temp">34°C</strong></span>
+          <span>🌡️ <span id="ui-track-temp-lbl">PISTA</span> <strong id="hud-track-temp">34°C</strong></span>
           <span id="hud-penalty" class="pen-tag hidden">+3s PEN</span>
         </div>
         <div id="hud-wing-warn" class="wing-warn hidden">⚠ DANNO AERO — BOX [P]</div>
@@ -250,7 +252,8 @@
         <button id="btn-hud-ers" class="hud-mini-btn" title="Modalità ERS (B)">⚡<span id="hud-ers-mode">MED</span></button>
         <button id="btn-hud-cam" class="hud-mini-btn" title="Camera (C) • Halo (H)">🎥 <span id="hud-cam-mode">CHASE</span></button>
         <button id="btn-hud-replay" class="hud-mini-btn" title="Instant Replay (V)">⏪</button>
-        <button id="btn-open-settings-hud" class="hud-mini-btn" title="Настройки Pro / Impostazioni (O)">⚙️</button>
+        <button id="btn-open-wiki-hud" class="hud-mini-btn" title="Wiki &amp; Guida F1 (W)">📖</button>
+        <button id="btn-open-settings-hud" class="hud-mini-btn" title="Impostazioni Pro (O)">⚙️</button>
         <button id="btn-hud-mute" class="hud-mini-btn" title="Audio (M)">🔊</button>
         <button id="btn-hud-pause" class="hud-mini-btn" title="Pausa (ESC)">⏸</button>
       </div>
@@ -300,14 +303,37 @@
   <!-- PAUSE MODAL -->
   <div id="pause-modal" class="modal-backdrop hidden">
     <div class="modal-card">
-      <h2>ПАУЗА / GARA IN PAUSA</h2>
-      <p class="modal-sub">WASD Guida • SHIFT DRS • SPACE/B ERS • Q/E Cambio • P Pit-Stop • 1/2/3 Radio • H Halo • V Replay • C Camera • O Настройки</p>
+      <h2 id="ui-pause-title">⏸ GARA IN PAUSA</h2>
+      <p id="ui-pause-sub" class="modal-sub">WASD Guida • SHIFT DRS • SPAZIO/B ERS • Q/E Cambio • P Pit-Stop • 1/2/3 Radio • H Halo • V Replay • C Camera • O Impostazioni</p>
       <div class="modal-actions">
         <button id="btn-resume" class="btn-primary-launch">RIPRENDI GARA</button>
-        <button id="btn-open-settings-pause" class="btn-secondary">⚙️ НАСТРОЙКИ PRO / IMPOSTAZIONI</button>
+        <button id="btn-open-wiki-pause" class="btn-secondary">📖 WIKI &amp; GUIDA MECCANICHE F1</button>
+        <button id="btn-open-settings-pause" class="btn-secondary">⚙️ IMPOSTAZIONI PRO</button>
         <button id="btn-restart" class="btn-secondary">RIAVVIA SESSIONE</button>
         <button id="btn-back-menu" class="btn-ghost">TORNA ALLO SHOWROOM</button>
       </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       INTERACTIVE F1 WIKI & DRIVING ACADEMY MODAL
+       ========================================================= -->
+  <div id="wiki-modal" class="modal-backdrop hidden">
+    <div class="modal-card wiki-modal-card">
+      <div class="wiki-header">
+        <div>
+          <span id="ui-wiki-eyebrow" class="finish-eyebrow">ENCICLOPEDIA INTERATTIVA PER PRINCIPIANTI &amp; PILOTI PRO</span>
+          <h2 id="ui-wiki-title">📖 WIKI &amp; ACCADEMIA FORMULA 1</h2>
+          <p id="ui-wiki-sub" class="wiki-sub-text">Non sai cosa siano Apex, ERS, DRS, Sottosterzo o Marbles? Scopri in modo semplice tutte le meccaniche reali simulate in APEX GP 3D.</p>
+        </div>
+        <div class="wiki-header-actions">
+          <button id="btn-wiki-lang" class="icon-btn lang-btn">🇮🇹 IT</button>
+          <button id="btn-close-wiki-top" class="icon-btn">✕ CHIUDI WIKI</button>
+        </div>
+      </div>
+
+      <div id="wiki-tabs" class="wiki-tabs"></div>
+      <div id="wiki-content-grid" class="wiki-content-grid"></div>
     </div>
   </div>
 
@@ -318,58 +344,58 @@
     <div class="modal-card settings-pro-card">
       <div class="settings-pro-header">
         <div>
-          <span class="finish-eyebrow">TELEMETRY &amp; SIMULATOR CONFIGURATION</span>
-          <h2>⚙️ НАСТРОЙКИ СИМУЛЯТОРА / IMPOSTAZIONI PRO</h2>
+          <span id="ui-set-eyebrow" class="finish-eyebrow">TELEMETRIA &amp; CONFIGURAZIONE SIMULATORE</span>
+          <h2 id="ui-set-title">⚙️ IMPOSTAZIONI PRO SIMULATORE</h2>
         </div>
-        <button id="btn-close-settings-top" class="icon-btn">✕ ЗАКРЫТЬ</button>
+        <button id="btn-close-settings-top" class="icon-btn">✕ CHIUDI</button>
       </div>
 
       <div id="settings-tabs" class="settings-tabs">
-        <button class="set-tab active" data-tab="gfx">1. ГРАФИКА &amp; PBR</button>
-        <button class="set-tab" data-tab="cam">2. КАМЕРА &amp; КОКПИТ</button>
-        <button class="set-tab" data-tab="eng">3. ИНЖЕНЕРИЯ БОЛИДА</button>
-        <button class="set-tab" data-tab="ctrl">4. УПРАВЛЕНИЕ &amp; FFB</button>
-        <button class="set-tab" data-tab="fia">5. АУДИО, ИИ &amp; FIA</button>
+        <button id="ui-set-tab1" class="set-tab active" data-tab="gfx">1. GRAFICA &amp; PBR</button>
+        <button id="ui-set-tab2" class="set-tab" data-tab="cam">2. CAMERA &amp; ABITACOLO</button>
+        <button id="ui-set-tab3" class="set-tab" data-tab="eng">3. INGEGNERIA AUTO</button>
+        <button id="ui-set-tab4" class="set-tab" data-tab="ctrl">4. COMANDI &amp; FFB</button>
+        <button id="ui-set-tab5" class="set-tab" data-tab="fia">5. AUDIO, AI &amp; FIA</button>
       </div>
 
       <!-- TAB 1: GRAPHICS & POST-PROCESSING -->
       <div class="set-pane active" id="set-pane-gfx">
         <div class="set-grid">
           <label class="set-item">
-            <div class="set-label"><span>Масштаб Рендера (Resolution Scale)</span><strong id="lbl-set-res">115%</strong></div>
+            <div class="set-label"><span id="ui-set-res">Scala Risoluzione (Resolution Scale)</span><strong id="lbl-set-res">115%</strong></div>
             <input type="range" id="set-res" min="50" max="175" step="5" value="115" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Качество Теней (Shadow Map)</span><strong>PCF Soft</strong></div>
+            <div class="set-label"><span id="ui-set-shadows">Qualità Ombre (Shadow Map)</span><strong>PCF Soft</strong></div>
             <select id="set-shadows" class="mini-select">
-              <option value="off">Выкл / Off</option>
-              <option value="1024">1024x1024 (Средние)</option>
-              <option value="2048" selected>2048x2048 (Высокие)</option>
-              <option value="4096">4096x4096 (Ультра)</option>
+              <option value="off">Disattivate / Off</option>
+              <option value="1024">1024x1024 (Medie)</option>
+              <option value="2048" selected>2048x2048 (Alte)</option>
+              <option value="4096">4096x4096 (Ultra)</option>
             </select>
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Отражения PBR &amp; Лака (Env Reflections)</span><strong id="lbl-set-env">155%</strong></div>
+            <div class="set-label"><span id="ui-set-env">Riflessi PBR &amp; Vernice (Env Map)</span><strong id="lbl-set-env">155%</strong></div>
             <input type="range" id="set-env" min="40" max="220" step="5" value="155" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Свечение HDR Bloom</span><strong id="lbl-set-bloom">115%</strong></div>
+            <div class="set-label"><span id="ui-set-bloom">Bagliore HDR Bloom</span><strong id="lbl-set-bloom">115%</strong></div>
             <input type="range" id="set-bloom" min="0" max="250" step="5" value="115" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Экспозиция ACES Filmic (Exposure)</span><strong id="lbl-set-exp">106%</strong></div>
+            <div class="set-label"><span id="ui-set-exp">Esposizione ACES Filmic</span><strong id="lbl-set-exp">106%</strong></div>
             <input type="range" id="set-exp" min="60" max="160" step="2" value="106" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Виньетка Скорости (Vignette)</span><strong id="lbl-set-vig">35%</strong></div>
+            <div class="set-label"><span id="ui-set-vig">Vignettatura Velocità</span><strong id="lbl-set-vig">35%</strong></div>
             <input type="range" id="set-vig" min="0" max="100" step="5" value="35" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Сглаживание SMAA (Anti-Aliasing)</span></div>
+            <div class="set-label"><span id="ui-set-smaa">Anti-Aliasing SMAA</span></div>
             <input type="checkbox" id="set-smaa" checked />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Адаптивный Контроль 60+ FPS</span></div>
+            <div class="set-label"><span id="ui-set-gov">Governor Adattivo 60+ FPS</span></div>
             <input type="checkbox" id="set-governor" checked />
           </label>
         </div>
@@ -379,38 +405,38 @@
       <div class="set-pane hidden" id="set-pane-cam">
         <div class="set-grid">
           <label class="set-item">
-            <div class="set-label"><span>Поле Зрения (FOV Offset)</span><strong id="lbl-set-fov">0°</strong></div>
+            <div class="set-label"><span id="ui-set-fov">Campo Visivo (FOV Offset)</span><strong id="lbl-set-fov">0°</strong></div>
             <input type="range" id="set-fov" min="-15" max="20" step="1" value="0" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Динамический FOV от Скорости</span><strong id="lbl-set-speedfov">100%</strong></div>
+            <div class="set-label"><span id="ui-set-speedfov">FOV Dinamico Velocità</span><strong id="lbl-set-speedfov">100%</strong></div>
             <input type="range" id="set-speedfov" min="0" max="150" step="5" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Высота Сиденья (Seat Height)</span><strong id="lbl-set-seath">0 см</strong></div>
+            <div class="set-label"><span id="ui-set-seath">Altezza Sedile (Seat Height)</span><strong id="lbl-set-seath">0 cm</strong></div>
             <input type="range" id="set-seath" min="-12" max="12" step="1" value="0" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Вынос Сиденья Вперед/Назад</span><strong id="lbl-set-seathe">0 см</strong></div>
+            <div class="set-label"><span id="ui-set-seatfore">Posizione Sedile Avanti/Indietro</span><strong id="lbl-set-seathe">0 cm</strong></div>
             <input type="range" id="set-seatfore" min="-15" max="15" step="1" value="0" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Наклон Взгляда (Camera Pitch)</span><strong id="lbl-set-pitch">0°</strong></div>
+            <div class="set-label"><span id="ui-set-pitch">Inclinazione Visuale (Pitch)</span><strong id="lbl-set-pitch">0°</strong></div>
             <input type="range" id="set-pitch" min="-8" max="8" step="1" value="0" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Тряска Камеры и Поребриков (Shake)</span><strong id="lbl-set-shake">100%</strong></div>
+            <div class="set-label"><span id="ui-set-shake">Vibrazione Camera &amp; Cordoli</span><strong id="lbl-set-shake">100%</strong></div>
             <input type="range" id="set-shake" min="0" max="150" step="5" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Крен Камеры в Поворотах (Roll)</span><strong id="lbl-set-roll">65%</strong></div>
+            <div class="set-label"><span id="ui-set-roll">Rollio Camera in Curva</span><strong id="lbl-set-roll">65%</strong></div>
             <input type="range" id="set-roll" min="0" max="100" step="5" value="65" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Скрыть Стойку Halo • Радар Близости</span></div>
+            <div class="set-label"><span id="ui-set-haloradar">Colonna Halo &amp; Radar Prossimità</span></div>
             <div class="set-check-row">
-              <label><input type="checkbox" id="set-halo" /> Без Halo</label>
-              <label><input type="checkbox" id="set-radar" checked /> Радар 360°</label>
+              <label><input type="checkbox" id="set-halo" /> <span id="ui-set-nohalo">Nascondi Halo</span></label>
+              <label><input type="checkbox" id="set-radar" checked /> <span id="ui-set-radar360">Radar 360°</span></label>
             </div>
           </label>
         </div>
@@ -420,35 +446,35 @@
       <div class="set-pane hidden" id="set-pane-eng">
         <div class="set-grid">
           <label class="set-item">
-            <div class="set-label"><span>Переднее Антикрыло (Front Wing)</span><strong id="lbl-set-fwing">25</strong></div>
+            <div class="set-label"><span id="ui-set-fwing">Ala Anteriore (Front Wing)</span><strong id="lbl-set-fwing">25</strong></div>
             <input type="range" id="set-fwing" min="1" max="50" step="1" value="25" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Заднее Антикрыло (Rear Wing)</span><strong id="lbl-set-rwing">26</strong></div>
+            <div class="set-label"><span id="ui-set-rwing">Ala Posteriore (Rear Wing)</span><strong id="lbl-set-rwing">26</strong></div>
             <input type="range" id="set-rwing" min="1" max="50" step="1" value="26" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Баланс Тормозов (Brake Bias F)</span><strong id="lbl-set-bbias">57%</strong></div>
+            <div class="set-label"><span id="ui-set-bbias">Ripartizione Frenata (Brake Bias F)</span><strong id="lbl-set-bbias">57%</strong></div>
             <input type="range" id="set-bbias" min="50" max="66" step="1" value="57" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Давление Тормозов (Brake Pressure)</span><strong id="lbl-set-bpress">100%</strong></div>
+            <div class="set-label"><span id="ui-set-bpress">Pressione Freni (Brake Pressure)</span><strong id="lbl-set-bpress">100%</strong></div>
             <input type="range" id="set-bpress" min="70" max="110" step="2" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Дифференциал под Газом (On-Throttle)</span><strong id="lbl-set-diffon">72%</strong></div>
+            <div class="set-label"><span id="ui-set-diffon">Differenziale in Accelerazione (On-Throttle)</span><strong id="lbl-set-diffon">72%</strong></div>
             <input type="range" id="set-diffon" min="50" max="100" step="2" value="72" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Дифференциал под Сброс (Off-Throttle)</span><strong id="lbl-set-diffoff">60%</strong></div>
+            <div class="set-label"><span id="ui-set-diffoff">Differenziale in Rilascio (Off-Throttle)</span><strong id="lbl-set-diffoff">60%</strong></div>
             <input type="range" id="set-diffoff" min="50" max="100" step="2" value="60" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Жесткость Подвески (Suspension)</span><strong id="lbl-set-susp">10</strong></div>
+            <div class="set-label"><span id="ui-set-susp">Rigidità Sospensioni</span><strong id="lbl-set-susp">10</strong></div>
             <input type="range" id="set-susp" min="1" max="20" step="1" value="10" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Клиренс Днища / Давление Шин PSI</span><strong id="lbl-set-ride">28 мм / 22.5 PSI</strong></div>
+            <div class="set-label"><span id="ui-set-ridepsi">Altezza Fondo / Pressione Gomme PSI</span><strong id="lbl-set-ride">28 mm / 22.5 PSI</strong></div>
             <div class="set-dual-range">
               <input type="range" id="set-ride" min="18" max="42" step="1" value="28" />
               <input type="range" id="set-psi" min="20" max="26" step="0.5" value="22.5" />
@@ -461,43 +487,43 @@
       <div class="set-pane hidden" id="set-pane-ctrl">
         <div class="set-grid">
           <label class="set-item">
-            <div class="set-label"><span>Чувствительность Руля (Sensitivity)</span><strong id="lbl-set-sens">100%</strong></div>
+            <div class="set-label"><span id="ui-set-sens">Sensibilità Sterzo</span><strong id="lbl-set-sens">100%</strong></div>
             <input type="range" id="set-sens" min="40" max="180" step="5" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Нелинейность Руля (Gamma Linearity)</span><strong id="lbl-set-lin">1.30</strong></div>
+            <div class="set-label"><span id="ui-set-lin">Linearità Sterzo (Gamma)</span><strong id="lbl-set-lin">1.30</strong></div>
             <input type="range" id="set-lin" min="100" max="250" step="5" value="130" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Мертвая Зона Руля (Deadzone)</span><strong id="lbl-set-dz">3%</strong></div>
+            <div class="set-label"><span id="ui-set-dz">Zona Morta Sterzo (Deadzone)</span><strong id="lbl-set-dz">3%</strong></div>
             <input type="range" id="set-dz" min="0" max="25" step="1" value="3" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Сила Вибрации / Force Feedback</span><strong id="lbl-set-ffb">100%</strong></div>
+            <div class="set-label"><span id="ui-set-ffb">Intensità Vibrazione / Force Feedback</span><strong id="lbl-set-ffb">100%</strong></div>
             <input type="range" id="set-ffb" min="0" max="150" step="5" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Помощь при Торможении (Brake Assist)</span></div>
+            <div class="set-label"><span id="ui-set-bassist">Assistenza Frenata (Brake Assist)</span></div>
             <select id="set-bassist" class="mini-select">
-              <option value="off" selected>Выкл / Off (Симулятор)</option>
-              <option value="low">Низкая / Low</option>
-              <option value="high">Высокая / High</option>
+              <option value="off" selected>Off (Simulatore Puro)</option>
+              <option value="low">Bassa / Low</option>
+              <option value="high">Alta / High</option>
             </select>
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Трекшн-Контроль (TC)</span></div>
+            <div class="set-label"><span id="ui-set-tclbl">Controllo Trazione (TC)</span></div>
             <select id="set-tc-modal" class="mini-select">
-              <option value="off">TC: OFF (Профи)</option>
+              <option value="off">TC: OFF (Pro)</option>
               <option value="med" selected>TC: MED</option>
               <option value="full">TC: FULL</option>
             </select>
           </label>
           <label class="set-item">
-            <div class="set-label"><span>АБС и Коробка Передач</span></div>
+            <div class="set-label"><span id="ui-set-absgear">ABS, Cambio &amp; Traiettoria</span></div>
             <div class="set-check-row">
               <label><input type="checkbox" id="set-abs-modal" checked /> ABS</label>
-              <label><input type="checkbox" id="set-man-modal" /> Ручная КПП</label>
-              <label><input type="checkbox" id="set-line-modal" checked /> 3D Траектория</label>
+              <label><input type="checkbox" id="set-man-modal" /> <span id="ui-set-mangear">Cambio Manuale</span></label>
+              <label><input type="checkbox" id="set-line-modal" checked /> <span id="ui-set-line3d">Traiettoria 3D</span></label>
             </div>
           </label>
         </div>
@@ -507,47 +533,47 @@
       <div class="set-pane hidden" id="set-pane-fia">
         <div class="set-grid">
           <label class="set-item">
-            <div class="set-label"><span>Общая Громкость (Master Volume)</span><strong id="lbl-set-vol">85%</strong></div>
+            <div class="set-label"><span id="ui-set-vol">Volume Principale (Master)</span><strong id="lbl-set-vol">85%</strong></div>
             <input type="range" id="set-vol" min="0" max="100" step="5" value="85" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Уровень ИИ Соперников (AI 1–110)</span><strong id="lbl-set-ailevel">84 / 110</strong></div>
+            <div class="set-label"><span id="ui-set-ailevel">Livello AI Avversari (1–110)</span><strong id="lbl-set-ailevel">84 / 110</strong></div>
             <input type="range" id="set-ailevel" min="1" max="110" step="1" value="84" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Агрессивность ИИ в Дуэлях</span><strong id="lbl-set-aiagg">100%</strong></div>
+            <div class="set-label"><span id="ui-set-aiagg">Aggressività AI nei Duelli</span><strong id="lbl-set-aiagg">100%</strong></div>
             <input type="range" id="set-aiagg" min="30" max="150" step="5" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Множитель Повреждений (Aero Damage)</span><strong id="lbl-set-dmg">100%</strong></div>
+            <div class="set-label"><span id="ui-set-dmg">Moltiplicatore Danni Aerodinamici</span><strong id="lbl-set-dmg">100%</strong></div>
             <input type="range" id="set-dmg" min="0" max="200" step="10" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Множитель Износа Шин (Tire Wear)</span><strong id="lbl-set-wear">100%</strong></div>
+            <div class="set-label"><span id="ui-set-wear">Moltiplicatore Usura Gomme</span><strong id="lbl-set-wear">100%</strong></div>
             <input type="range" id="set-wear" min="0" max="300" step="25" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Расход Топлива (Fuel Burn)</span><strong id="lbl-set-fuel">100%</strong></div>
+            <div class="set-label"><span id="ui-set-fuel">Consumo Carburante (Fuel Burn)</span><strong id="lbl-set-fuel">100%</strong></div>
             <input type="range" id="set-fuel" min="0" max="200" step="25" value="100" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Строгость Лимитов Трассы FIA</span></div>
+            <div class="set-label"><span id="ui-set-limits">Severità Limiti Pista FIA</span></div>
             <select id="set-limits" class="mini-select">
-              <option value="off">Отключены / Off</option>
-              <option value="standard" selected>Стандарт FIA (3 пред. = +3с)</option>
-              <option value="strict">Строгий Чемпионат (Strict)</option>
+              <option value="off">Disattivati / Off</option>
+              <option value="standard" selected>Standard FIA (3 avvisi = +3s)</option>
+              <option value="strict">Severo Campionato (Strict)</option>
             </select>
           </label>
           <label class="set-item">
-            <div class="set-label"><span>Скорость Смены Дня и Ночи</span><strong id="lbl-set-tod">3x</strong></div>
+            <div class="set-label"><span id="ui-set-tod">Velocità Ciclo Giorno/Notte</span><strong id="lbl-set-tod">3x</strong></div>
             <input type="range" id="set-tod" min="0" max="15" step="1" value="3" />
           </label>
         </div>
       </div>
 
       <div class="settings-pro-footer">
-        <button id="btn-reset-settings" class="btn-secondary">↺ СБРОС ПО УМОЛЧАНИЮ / RESET</button>
-        <button id="btn-close-settings" class="btn-primary-launch">✓ ПРИМЕНИТЬ И ЗАКРЫТЬ</button>
+        <button id="btn-reset-settings" class="btn-secondary">↺ RIPRISTINA PREDEFINITI</button>
+        <button id="btn-close-settings" class="btn-primary-launch">✓ APPLICA E CHIUDI</button>
       </div>
     </div>
   </div>
@@ -563,7 +589,7 @@
       <!-- Post-Race Telemetry Trace Graph (Speed, Throttle, Brake across Best Lap!) -->
       <div class="telemetry-graph-box">
         <div class="tel-graph-head">
-          <span>📈 TELEMETRIA GIRO VELOCE (VELOCITÀ / GAS / FRENO)</span>
+          <span id="ui-tel-head">📈 TELEMETRIA GIRO VELOCE (VELOCITÀ / GAS / FRENO)</span>
           <button id="btn-export-json" class="tel-export-btn">⬇ JSON</button>
         </div>
         <canvas id="telemetry-trace-canvas" width="460" height="90"></canvas>

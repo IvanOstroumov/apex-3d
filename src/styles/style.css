@@ -520,3 +520,162 @@ kbd { font-family: var(--font-mono); font-size: 9.5px; padding: 1px 4px; border-
   padding-top: 10px;
 }
 
+/* ==========================================================================
+   INTERACTIVE F1 WIKI & DRIVING ACADEMY MODAL
+   ========================================================================== */
+.wiki-btn {
+  border-color: var(--accent-gold) !important;
+  background: rgba(255, 209, 59, 0.15) !important;
+  color: #fff6d6 !important;
+  box-shadow: 0 0 14px rgba(255, 209, 59, 0.22);
+}
+.wiki-btn:hover {
+  background: rgba(255, 209, 59, 0.28) !important;
+}
+.lang-btn {
+  border-color: rgba(34, 229, 107, 0.5) !important;
+  background: rgba(34, 229, 107, 0.14) !important;
+  color: #ffffff !important;
+}
+.lang-btn:hover {
+  background: rgba(34, 229, 107, 0.26) !important;
+}
+.wiki-modal-card {
+  width: 920px;
+  max-width: 95vw;
+  max-height: 89vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: left;
+  padding: 18px 22px;
+  pointer-events: auto;
+}
+.wiki-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 10px;
+}
+.wiki-header h2 {
+  font-size: 20px;
+  margin-bottom: 3px;
+}
+.wiki-sub-text {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+.wiki-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.wiki-tabs {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.wiki-tab-btn {
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: 0.14s;
+  text-align: center;
+}
+.wiki-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+.wiki-tab-btn.active {
+  background: linear-gradient(135deg, #e10600, #990000);
+  color: #fff;
+  border-color: #ff3b30;
+  box-shadow: 0 4px 14px rgba(225, 6, 0, 0.4);
+}
+.wiki-content-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 64vh;
+  padding-right: 4px;
+}
+.wiki-content-grid::-webkit-scrollbar {
+  width: 5px;
+}
+.wiki-content-grid::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 5px;
+}
+.wiki-card {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.wiki-card-badge {
+  align-self: flex-start;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.1px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: rgba(0, 0, 0, 0.35);
+}
+.wiki-card h3 {
+  font-size: 14px;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1.25;
+}
+.wiki-card-sub {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-cyan);
+}
+.wiki-card-body {
+  font-size: 11.5px;
+  color: #d6dfee;
+  line-height: 1.5;
+}
+.wiki-card-body code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: rgba(0, 229, 255, 0.15);
+  color: var(--accent-cyan);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.wiki-svg {
+  width: 100%;
+  height: auto;
+  max-height: 110px;
+  background: rgba(6, 9, 15, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  margin-top: 2px;
+}
+.wiki-pro-tip {
+  margin-top: auto;
+  background: rgba(255, 209, 59, 0.1);
+  border-left: 3px solid var(--accent-gold);
+  border-radius: 5px;
+  padding: 6px 9px;
+  font-size: 10.5px;
+  color: #ffe89e;
+  line-height: 1.38;
+}
