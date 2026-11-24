@@ -264,6 +264,30 @@ export class ApexGPGame {
       }
     );
 
+    // Left Main Navigation Dock: Switch between 3D Garage & Play Race Hub
+    const navPlayBtn = document.getElementById('nav-btn-play');
+    const navGarageBtn = document.getElementById('nav-btn-garage');
+    const viewGarage = document.getElementById('menu-view-garage');
+    const viewPlay = document.getElementById('menu-view-play');
+    const setMenuTab = (tab: 'garage' | 'play') => {
+      navPlayBtn?.classList.toggle('active', tab === 'play');
+      navGarageBtn?.classList.toggle('active', tab === 'garage');
+      viewGarage?.classList.toggle('hidden', tab !== 'garage');
+      viewPlay?.classList.toggle('hidden', tab !== 'play');
+      if (tab === 'play') {
+        this.hud.updateSelectedTrackUI(TRACKS[this.selectedTrackIdx], this.selectedTrackIdx);
+      }
+    };
+    navPlayBtn?.addEventListener('click', () => setMenuTab('play'));
+    navGarageBtn?.addEventListener('click', () => setMenuTab('garage'));
+
+    // 2D Track Map & Real Satellite View Toggle in Play Hub
+    document.getElementById('btn-map-vector')?.addEventListener('click', () => this.hud.setMapPreviewMode('vector'));
+    document.getElementById('btn-map-satellite')?.addEventListener('click', () => this.hud.setMapPreviewMode('satellite'));
+    document.getElementById('track-satellite-pip')?.addEventListener('click', () => {
+      this.hud.setMapPreviewMode(this.hud.mapPreviewMode === 'vector' ? 'satellite' : 'vector');
+    });
+
     document.querySelectorAll('#compound-pills .pill-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const comp = (btn as HTMLElement).dataset.compound as TireCompoundId;
@@ -830,17 +854,13 @@ export class ApexGPGame {
       const aiCompounds: TireCompoundId[] = this.track.trackWetness > 0.45
         ? ['inter', 'wet', 'inter', 'inter']
         : ['soft', 'medium', 'soft', 'hard'];
-      const rivals = [
-        { team: otherTeams[0], number: otherTeams[0].number, code: otherTeams[0].code, isPlayer: false, compound: aiCompounds[0] },
-        { team: otherTeams[1], number: otherTeams[1].number, code: otherTeams[1].code, isPlayer: false, compound: aiCompounds[1] },
-        { team: otherTeams[2], number: otherTeams[2].number, code: otherTeams[2].code, isPlayer: false, compound: aiCompounds[2] },
-        { team: otherTeams[3], number: otherTeams[3].number, code: otherTeams[3].code, isPlayer: false, compound: aiCompounds[0] },
-        { team: playerTeam,    number: playerTeam.aiNumber,  code: playerTeam.aiCode,  isPlayer: false, compound: aiCompounds[1] },
-        { team: otherTeams[0], number: otherTeams[0].aiNumber, code: otherTeams[0].aiCode, isPlayer: false, compound: aiCompounds[2] },
-        { team: otherTeams[1], number: otherTeams[1].aiNumber, code: otherTeams[1].aiCode, isPlayer: false, compound: aiCompounds[3] },
-        { team: otherTeams[2], number: otherTeams[2].aiNumber, code: otherTeams[2].aiCode, isPlayer: false, compound: aiCompounds[1] },
-        { team: otherTeams[3], number: otherTeams[3].aiNumber, code: otherTeams[3].aiCode, isPlayer: false, compound: aiCompounds[2] }
-      ];
+      const rivals = otherTeams.slice(0, 9).map((t, idx) => ({
+        team: t,
+        number: t.number,
+        code: t.code,
+        isPlayer: false,
+        compound: aiCompounds[idx % aiCompounds.length]
+      }));
       const playerSlot = this.isQualifyingSession ? 0 : (this.qualifiedGridSlot ?? 4);
       rivals.splice(playerSlot, 0, {
         team: playerTeam,

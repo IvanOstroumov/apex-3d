@@ -257,10 +257,10 @@ def build_wheel_unit(prefix: str, radius: float, width: float, side: int, lod_su
     """Builds a spinning Tire+Rim mesh + Sidewall Band mesh + static Brake Caliper/Rotor mesh centered at (0,0,0)."""
     half_w = width * 0.5
     rim_r = radius * 0.59
-    seg_spin = 64 if lod_sub >= 2 else 32
-    prof_steps = 24 if lod_sub >= 2 else 14
+    seg_spin = 80 if lod_sub >= 2 else 40
+    prof_steps = 30 if lod_sub >= 2 else 16
 
-    # 1. Lathe Pirelli 18" Slick Tire + Forged Magnesium Barrel + Sculpted 10-Spoke BBS Dish
+    # 1. Lathe Pirelli 18" Slick Tire + Forged Magnesium Barrel + Sculpted 20-Rib Y-Spoke BBS Dish
     bm_tire = bmesh.new()
     prof = []
     for i in range(prof_steps + 1):
@@ -298,7 +298,7 @@ def build_wheel_unit(prefix: str, radius: float, width: float, side: int, lod_su
             l[uv_t].uv = (0.5, 0.5)
     make_mesh_obj(f"Wheel_Tire_{prefix}", bm_tire, mats["Tire_Rubber"], parent=root, smooth=True)
 
-    # 1B. Forged Magnesium BBS 18" Rim + Aero Dish + 10 Machined Ribs + Center-Lock Nut (`Rim_Alloy`)
+    # 1B. Forged Magnesium BBS 18" Rim + Aero Dish + 20 Y-Split Machined Ribs + Center-Lock Nut (`Rim_Alloy`)
     bm_rim = bmesh.new()
     dish_prof = [
         (side * half_w * 0.86, 0.038),
@@ -324,15 +324,16 @@ def build_wheel_unit(prefix: str, radius: float, width: float, side: int, lod_su
             )
             bm_rim.faces.new(verts)
 
-    # 10 Machined Forged Spokes
-    for sp in range(10):
-        ang = (sp / 10.0) * math.pi * 2.0
+    # 20 Machined Forged Y-Split Spokes
+    spoke_count = 20 if lod_sub >= 2 else 12
+    for sp in range(spoke_count):
+        ang = (sp / float(spoke_count)) * math.pi * 2.0 + (0.06 if sp % 2 == 0 else -0.06)
         b_sp = bmesh.new()
         bmesh.ops.create_cube(b_sp, size=1.0)
         for v in b_sp.verts:
-            lx = side * half_w * 0.88 + v.co.x * 0.020
-            ly = (0.36 + v.co.y * 0.44) * rim_r
-            lz = v.co.z * 0.018
+            lx = side * half_w * 0.885 + v.co.x * 0.022
+            ly = (0.35 + v.co.y * 0.46) * rim_r
+            lz = v.co.z * 0.014
             ry = ly * math.cos(ang) - lz * math.sin(ang)
             rz = ly * math.sin(ang) + lz * math.cos(ang)
             v.co = P(lx, ry, rz)
@@ -340,9 +341,9 @@ def build_wheel_unit(prefix: str, radius: float, width: float, side: int, lod_su
             bm_rim.faces.new([bm_rim.verts.new(v.co) for v in f.verts])
         b_sp.free()
 
-    # Center-lock nut
+    # Center-lock nut with machined retention collar
     b_nut = bmesh.new()
-    bmesh.ops.create_cone(b_nut, cap_ends=True, cap_tris=False, segments=12, radius1=0.050, radius2=0.032, depth=0.056)
+    bmesh.ops.create_cone(b_nut, cap_ends=True, cap_tris=False, segments=18, radius1=0.052, radius2=0.032, depth=0.060)
     for v in b_nut.verts:
         nx = side * (half_w * 0.90 + v.co.z * 0.55)
         v.co = P(nx, v.co.x, v.co.y)
@@ -383,19 +384,39 @@ def build_wheel_unit(prefix: str, radius: float, width: float, side: int, lod_su
                 l[uv_s].uv = (0.5 - end * tz * 0.46, 0.5 + ty * 0.46)
     make_mesh_obj(f"Wheel_Side_{prefix}", bm_side, mats["Tire_Side"], parent=root, smooth=True)
 
-    # 3. Ventilated Carbon-Ceramic Brake Rotor + 6-Piston Brembo Caliper
+    # 3. High-Detail Ventilated Carbon-Ceramic Brake Rotor + 6-Piston Brembo Caliper + Cooling Vanes
     bm_disc = bmesh.new()
-    for r_d, w_d, a_span in [(radius * 0.50, 0.048, math.pi * 2.0), (radius * 0.54, 0.088, 1.15)]:
-        segs_d = 28 if a_span > 4 else 10
+    for r_d, w_d, a_span in [
+        (radius * 0.52, 0.036, math.pi * 2.0),
+        (radius * 0.42, 0.042, math.pi * 2.0),
+        (radius * 0.56, 0.094, 1.25),
+    ]:
+        segs_d = 44 if a_span > 4 else 18
         r_f = []
         r_b = []
         for s in range(segs_d + 1):
-            ang = -0.55 + (s / segs_d) * a_span
+            ang = -0.60 + (s / segs_d) * a_span
             cy, cz = math.cos(ang) * r_d, math.sin(ang) * r_d
             r_f.append(bm_disc.verts.new(P(-side * width * 0.18 - w_d * 0.5, cy, cz)))
             r_b.append(bm_disc.verts.new(P(-side * width * 0.18 + w_d * 0.5, cy, cz)))
         for s in range(segs_d):
             bm_disc.faces.new((r_f[s], r_b[s], r_b[s + 1], r_f[s + 1]))
+    # Radial ventilation vanes around the carbon rotor
+    for v_idx in range(16):
+        vang = (v_idx / 16.0) * math.pi * 2.0
+        b_vn = bmesh.new()
+        bmesh.ops.create_cube(b_vn, size=1.0)
+        for v in b_vn.verts:
+            lx = -side * width * 0.18 + v.co.x * 0.048
+            lr = radius * (0.34 + (v.co.y + 0.5) * 0.18)
+            lt = v.co.z * 0.008
+            cy = lr * math.cos(vang) - lt * math.sin(vang)
+            cz = lr * math.sin(vang) + lt * math.cos(vang)
+            v.co = P(lx, cy, cz)
+        for f in b_vn.faces:
+            bm_disc.faces.new([bm_disc.verts.new(v.co) for v in f.verts])
+        b_vn.free()
+
     bmesh.ops.recalc_face_normals(bm_disc, faces=bm_disc.faces)
     uv_d = bm_disc.loops.layers.uv.new("UVMap")
     for f in bm_disc.faces:
@@ -433,7 +454,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
     bpy.context.collection.objects.link(body_grp)
     body_grp.parent = root
 
-    ring_n = 36 if subsurf_lvl >= 2 else 24
+    ring_n = 48 if subsurf_lvl >= 2 else 30
 
     # 1. Subsurf Catmull-Clark Monocoque + Droop Nose + Coke-Bottle Engine Cover
     chassis_bm = build_loft_bmesh([
@@ -451,7 +472,10 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
     ], ring_pts=ring_n)
     chassis_obj = make_mesh_obj("Chassis_Monocoque", chassis_bm, mats["Paint_Body"], parent=body_grp, subsurf=subsurf_lvl)
 
-    # 2. Subsurf High-Undercut Downwash Sidepods + Carbon Inlet Lips + Louvers + Swan-Neck Mirrors + Wheel Brows
+    # Pitot Aero Sensor Probe on Nosecone
+    add_tube_curve("Nose_Pitot_Probe", [(0.0, 0.51, 1.54), (0.0, 0.58, 1.58), (0.0, 0.58, 1.72)], 0.0045, mats["Titanium_Exhaust"], body_grp)
+
+    # 2. Subsurf High-Undercut Downwash Sidepods + Carbon Inlet Lips + 9 Louvers + Swan-Neck Mirrors + Wheel Brows
     sp_slices = [
         (-1.96, 0.08, 0.05, 0.058, 0.27, 1.04),
         (-1.42, 0.24, 0.16, 0.048, 0.44, 1.10),
@@ -461,7 +485,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
         ( 0.78, 0.26, 0.36, 0.22,  0.58, 1.04),
     ]
     for side in (-1, 1):
-        sp_bm = build_loft_bmesh(sp_slices, ring_pts=ring_n - 6, offset_x=side * 0.44)
+        sp_bm = build_loft_bmesh(sp_slices, ring_pts=ring_n - 8, offset_x=side * 0.44)
         sp_obj = make_mesh_obj(f"Sidepod_{side}", sp_bm, mats["Paint_Body"], parent=body_grp, subsurf=max(1, subsurf_lvl - 1))
 
         # Radiator carbon lip + dark radiator core
@@ -477,12 +501,12 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
         cam_bm = build_airfoil_bmesh(0.15, 0.11, 0.22, 0.05, span_segs=6, prof_segs=12, offset=(side * 0.21, 0.31, 1.98))
         make_mesh_obj(f"FOM_Cam_{side}", cam_bm, mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
 
-        # 5 Beveled Cooling Gill Louvers
-        for g in range(5):
-            gill_bm = build_airfoil_bmesh(0.14, 0.045, 0.18, 0.38, span_segs=5, prof_segs=10, offset=(side * (0.44 - g * 0.025), 0.56 - g * 0.018, -0.25 - g * 0.16))
+        # 9 Beveled Cooling Gill Louvers along the sidepod shoulder
+        for g in range(9):
+            gill_bm = build_airfoil_bmesh(0.15, 0.036, 0.18, 0.42, span_segs=6, prof_segs=10, offset=(side * (0.45 - g * 0.016), 0.57 - g * 0.012, -0.14 - g * 0.105))
             make_mesh_obj(f"Gill_{side}_{g}", gill_bm, mats["Dark_Cavity"], parent=body_grp)
 
-        # Swan-neck mirror stalk + Subsurf mirror pod + reflective glass
+        # Swan-neck mirror stalk + Subsurf mirror pod + reflective glass + outer vortex vane
         add_tube_curve(f"Mirror_Stalk_{side}", [(side * 0.34, 0.62, 0.48), (side * 0.48, 0.68, 0.47), (side * 0.58, 0.68, 0.45)], 0.011, mats["Carbon_Weave"], body_grp)
         mp_bm = build_loft_bmesh([(0.39, 0.068, 0.062, 0.655, 0.705, 1.04), (0.46, 0.072, 0.066, 0.652, 0.708, 1.05), (0.53, 0.025, 0.020, 0.668, 0.692, 1.02)], ring_pts=16, offset_x=side * 0.59)
         make_mesh_obj(f"Mirror_Pod_{side}", mp_bm, mats["Paint_Solid"], parent=body_grp, subsurf=1)
@@ -494,16 +518,25 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
             l[uv_ml].uv = (0.5, 0.5)
         make_mesh_obj(f"Mirror_Lens_{side}", bm_ml, mats["Mirror_Glass"], parent=body_grp)
 
-        # Over-wheel curved aero wake deflector ("Wheel Brow")
+        # Over-wheel curved aero wake deflector ("Wheel Brow") + Rear Brake Duct Scoop
         add_tube_curve(f"Wheel_Brow_{side}", [
             (side * 0.77, 0.48, 1.44),
             (side * 0.78, 0.66, 1.56),
             (side * 0.79, 0.715, 1.72),
             (side * 0.80, 0.675, 1.88),
         ], 0.026, mats["Carbon_Weave"], body_grp, scale_x_around=(side * 0.785, 2.1))
+        add_tube_curve(f"Rear_Brake_Duct_{side}", [
+            (side * 0.74, 0.25, -1.58),
+            (side * 0.75, 0.42, -1.66),
+            (side * 0.74, 0.46, -1.82),
+        ], 0.028, mats["Carbon_Weave"], body_grp)
 
-        # Floor edge vortex skirt
+        # Floor edge vortex skirt + 6 Floor Edge Winglet Strakes
         add_tube_curve(f"Floor_Skirt_{side}", [(side * 0.955, 0.052, 0.62), (side * 0.965, 0.058, -0.25), (side * 0.950, 0.052, -1.25)], 0.016, mats["Paint_Accent"], body_grp)
+        for f_idx in range(6):
+            fz_pos = 0.55 - f_idx * 0.28
+            fw_bm = build_airfoil_bmesh(0.065, 0.11, 0.14, 0.25, span_segs=4, prof_segs=8, offset=(side * 0.94, 0.072, fz_pos))
+            make_mesh_obj(f"Floor_Strake_{side}_{f_idx}", fw_bm, mats["Carbon_Weave"], parent=body_grp)
 
     # 3. Ground-Effect Carbon Venturi Floor + Twin-Arch Rear Diffuser + Strakes
     bm_floor = bmesh.new()
@@ -553,7 +586,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
     # 4. Central Triple Inconel Exhaust (Main Turbo Pipe + Dual Wastegates)
     for idx_p, (px, py, pz, ro, ri, plen) in enumerate([(0, 0.385, -2.24, 0.062, 0.052, 0.32), (-0.068, 0.342, -2.22, 0.028, 0.021, 0.26), (0.068, 0.342, -2.22, 0.028, 0.021, 0.26)]):
         bm_ex = bmesh.new()
-        segs_e = 28
+        segs_e = 36
         ro_f = [bm_ex.verts.new(P(px + math.cos(a)*ro*1.05, py + math.sin(a)*ro*1.05, pz + plen*0.5)) for a in [k/segs_e*math.pi*2 for k in range(segs_e)]]
         ro_b = [bm_ex.verts.new(P(px + math.cos(a)*ro, py + math.sin(a)*ro, pz - plen*0.5)) for a in [k/segs_e*math.pi*2 for k in range(segs_e)]]
         ri_b = [bm_ex.verts.new(P(px + math.cos(a)*ri, py + math.sin(a)*ri, pz - plen*0.5)) for a in [k/segs_e*math.pi*2 for k in range(segs_e)]]
@@ -571,7 +604,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
         make_mesh_obj(f"Exhaust_Pipe_{idx_p}", bm_ex, mats["Titanium_Exhaust"], parent=body_grp, bevel_w=0.002)
 
     # 5. Roll-Hoop Airbox, T-Cam, Dorsal Shark Fin & Fin Decal Planes
-    ab_bm = build_loft_bmesh([(-0.58, 0.13, 0.08, 0.80, 0.96, 1.04), (-0.28, 0.18, 0.14, 0.82, 1.00, 1.05), (-0.09, 0.15, 0.12, 0.84, 0.99, 1.03)], ring_pts=20)
+    ab_bm = build_loft_bmesh([(-0.58, 0.13, 0.08, 0.80, 0.96, 1.04), (-0.28, 0.18, 0.14, 0.82, 1.00, 1.05), (-0.09, 0.15, 0.12, 0.84, 0.99, 1.03)], ring_pts=24)
     make_mesh_obj("RollHoop_Airbox", ab_bm, mats["Paint_Solid"], parent=body_grp, subsurf=1)
     add_strut("TCam_Stem", (0, 0.98, -0.24), (0, 1.08, -0.26), 0.065, 0.015, mats["Carbon_Weave"], body_grp)
     tc_bm = build_airfoil_bmesh(0.32, 0.062, 0.024, span_segs=10, offset=(0, 1.09, -0.26))
@@ -615,8 +648,8 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
     add_tube_curve("Cockpit_Headrest", [(-0.21, 0.67, 0.28), (-0.22, 0.69, -0.08), (0.0, 0.71, -0.15), (0.22, 0.69, -0.08), (0.21, 0.67, 0.28)], 0.038, mats["Dark_Cavity"], body_grp)
 
     # Halo separate named object (`Halo_Mesh`) for virtual-halo toggle
-    halo_a = add_tube_curve("Halo_Hoop", [(-0.29, 0.66, -0.05), (-0.32, 0.85, 0.24), (-0.18, 0.91, 0.58), (0.0, 0.91, 0.72), (0.18, 0.91, 0.58), (0.32, 0.85, 0.24), (0.29, 0.66, -0.05)], 0.027, mats["Carbon_Weave"], None, res_u=24)
-    halo_b = add_tube_curve("Halo_Pillar", [(0, 0.59, 0.85), (0, 0.76, 0.77), (0, 0.91, 0.71)], 0.022, mats["Carbon_Weave"], None, res_u=12)
+    halo_a = add_tube_curve("Halo_Hoop", [(-0.29, 0.66, -0.05), (-0.32, 0.85, 0.24), (-0.18, 0.91, 0.58), (0.0, 0.91, 0.72), (0.18, 0.91, 0.58), (0.32, 0.85, 0.24), (0.29, 0.66, -0.05)], 0.027, mats["Carbon_Weave"], None, res_u=28)
+    halo_b = add_tube_curve("Halo_Pillar", [(0, 0.59, 0.85), (0, 0.76, 0.77), (0, 0.91, 0.71)], 0.022, mats["Carbon_Weave"], None, res_u=14)
     bm_halo = bmesh.new()
     bm_halo.from_mesh(halo_a.data)
     bm_halo.from_mesh(halo_b.data)
@@ -626,7 +659,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
 
     # Sculpted Aero Driver Helmet + Visor
     bm_helm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm_helm, u_segments=28, v_segments=20, radius=0.155)
+    bmesh.ops.create_uvsphere(bm_helm, u_segments=32, v_segments=24, radius=0.155)
     for v in bm_helm.verts:
         v.co = P(v.co.x * 0.94, 0.81 + v.co.z * 1.0, 0.10 - v.co.y * 1.18)
     uv_h = bm_helm.loops.layers.uv.new("UVMap")
@@ -636,12 +669,12 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
     make_mesh_obj("Driver_Helmet", bm_helm, mats["Helmet_Shell"], parent=body_grp, smooth=True)
 
     bm_vis = bmesh.new()
-    for vi in range(10):
-        vf0 = 0.28 + (vi / 10.0) * 0.30
-        vf1 = 0.28 + ((vi + 1) / 10.0) * 0.30
-        for ui in range(18):
-            uf0 = -0.36 + (ui / 18.0) * 0.72
-            uf1 = -0.36 + ((ui + 1) / 18.0) * 0.72
+    for vi in range(12):
+        vf0 = 0.28 + (vi / 12.0) * 0.30
+        vf1 = 0.28 + ((vi + 1) / 12.0) * 0.30
+        for ui in range(20):
+            uf0 = -0.36 + (ui / 20.0) * 0.72
+            uf1 = -0.36 + ((ui + 1) / 20.0) * 0.72
             quad = []
             for uf, vf in [(uf0, vf0), (uf1, vf0), (uf1, vf1), (uf0, vf1)]:
                 ph = vf * math.pi
@@ -658,19 +691,22 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
             l[uv_v].uv = (0.5, 0.5)
     make_mesh_obj("Driver_Visor", bm_vis, mats["Visor_Iridium"], parent=body_grp, smooth=True)
 
-    # 7. Swan-Neck Rear Wing Mainplane, Bi-Plane Beam Wings, Curved Endplates & Glowing Red LED Strips!
+    # 7. Swan-Neck Rear Wing Mainplane, DRS Actuator Pod, Bi-Plane Beam Wings, Curved Endplates & Glowing Red LED Strips!
     for px in (-0.085, 0.085):
         add_tube_curve(f"Swan_Pylon_{px}", [(px, 0.40, -2.06), (px, 0.68, -2.16), (px, 0.92, -2.19), (px, 0.955, -2.23), (px, 0.86, -2.25)], 0.021, mats["Carbon_Weave"], body_grp, scale_x_around=(px, 0.30))
 
-    make_mesh_obj("Beam_Lower", build_airfoil_bmesh(1.02, 0.19, 0.14, 0.16, spoon_dip=0.015, span_segs=20, offset=(0, 0.42, -2.24)), mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
-    make_mesh_obj("Beam_Upper", build_airfoil_bmesh(1.06, 0.15, 0.13, 0.30, spoon_dip=0.012, span_segs=20, offset=(0, 0.485, -2.31)), mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
-    make_mesh_obj("Rear_Mainplane", build_airfoil_bmesh(1.22, 0.30, 0.15, 0.12, spoon_dip=0.038, sweep_z=0.05, dihedral=-0.015, span_segs=28, offset=(0, 0.85, -2.23)), mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
+    drs_pod_bm = build_loft_bmesh([(-2.36, 0.032, 0.026, 0.87, 0.99, 1.04), (-2.24, 0.044, 0.036, 0.85, 0.98, 1.06), (-2.12, 0.024, 0.018, 0.86, 0.94, 1.02)], ring_pts=14)
+    make_mesh_obj("DRS_Actuator_Pod", drs_pod_bm, mats["Carbon_Weave"], parent=body_grp, subsurf=1)
+
+    make_mesh_obj("Beam_Lower", build_airfoil_bmesh(1.02, 0.19, 0.14, 0.16, spoon_dip=0.015, span_segs=22, offset=(0, 0.42, -2.24)), mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
+    make_mesh_obj("Beam_Upper", build_airfoil_bmesh(1.06, 0.15, 0.13, 0.30, spoon_dip=0.012, span_segs=22, offset=(0, 0.485, -2.31)), mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
+    make_mesh_obj("Rear_Mainplane", build_airfoil_bmesh(1.22, 0.30, 0.15, 0.12, spoon_dip=0.038, sweep_z=0.05, dihedral=-0.015, span_segs=32, offset=(0, 0.85, -2.23)), mats["Carbon_Weave"], parent=body_grp, bevel_w=0.002)
 
     for side in (-1, 1):
         bm_ep = bmesh.new()
         ep_rings = []
-        for i in range(21):
-            t = i / 20.0
+        for i in range(25):
+            t = i / 24.0
             y = 0.38 + t * 0.65
             s_flare = math.sin(min(1.0, t * 1.18) * math.pi * 0.5)
             top_roll = (((t - 0.86) / 0.14) ** 2) * 0.028 if t > 0.86 else 0.0
@@ -680,11 +716,11 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
             clen = zf - zb
             zmid = 0.5 * (zf + zb)
             ht = 0.012 * (1.0 - abs(t - 0.5) * 0.25)
-            ring = [bm_ep.verts.new(P(xc + math.sin(k / 12.0 * math.pi * 2) * ht, y, zmid + math.cos(k / 12.0 * math.pi * 2) * clen * 0.5)) for k in range(12)]
+            ring = [bm_ep.verts.new(P(xc + math.sin(k / 14.0 * math.pi * 2) * ht, y, zmid + math.cos(k / 14.0 * math.pi * 2) * clen * 0.5)) for k in range(14)]
             ep_rings.append(ring)
-        for i in range(20):
-            for k in range(12):
-                kn = (k + 1) % 12
+        for i in range(24):
+            for k in range(14):
+                kn = (k + 1) % 14
                 bm_ep.faces.new((ep_rings[i][k], ep_rings[i+1][k], ep_rings[i+1][kn], ep_rings[i][kn]))
         bmesh.ops.recalc_face_normals(bm_ep, faces=bm_ep.faces)
         uv_ep = bm_ep.loops.layers.uv.new("UVMap")
@@ -698,7 +734,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
     # Central 15-Diode FIA Rain Light
     add_tube_curve("FIA_Rain_Light", [(0, 0.16, -2.355), (0, 0.25, -2.355)], 0.022, mats["Taillight_LED"], body_grp)
 
-    # 8. Aero-Blade Double-Wishbone Suspension
+    # 8. Aero-Blade Double-Wishbone Suspension + Steering Tie-Rod
     for side in (-1, 1):
         fhub = (side * 0.82, 0.324, 1.72)
         add_strut(f"Susp_FU1_{side}", (side * 0.20, 0.44, 1.94), (fhub[0], fhub[1] + 0.085, fhub[2] + 0.04), 0.052, 0.012, mats["Carbon_Weave"], body_grp)
@@ -706,6 +742,7 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
         add_strut(f"Susp_FL1_{side}", (side * 0.20, 0.16, 1.90), (fhub[0], fhub[1] - 0.085, fhub[2] + 0.04), 0.052, 0.012, mats["Carbon_Weave"], body_grp)
         add_strut(f"Susp_FL2_{side}", (side * 0.24, 0.16, 1.46), (fhub[0], fhub[1] - 0.085, fhub[2] - 0.04), 0.052, 0.012, mats["Carbon_Weave"], body_grp)
         add_strut(f"Susp_FPush_{side}", (side * 0.22, 0.50, 1.66), (fhub[0], fhub[1] - 0.06, fhub[2]), 0.028, 0.011, mats["Carbon_Weave"], body_grp)
+        add_strut(f"Susp_FTie_{side}", (side * 0.21, 0.33, 1.82), (fhub[0], fhub[1] + 0.02, fhub[2] + 0.09), 0.036, 0.010, mats["Carbon_Weave"], body_grp)
 
         rhub = (side * 0.80, 0.344, -1.70)
         add_strut(f"Susp_RU1_{side}", (side * 0.15, 0.42, -1.48), (rhub[0], rhub[1] + 0.09, rhub[2] + 0.04), 0.056, 0.013, mats["Carbon_Weave"], body_grp)
@@ -715,29 +752,32 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
         add_strut(f"Susp_RAxle_{side}", (side * 0.12, 0.31, -1.70), rhub, 0.032, 0.032, mats["Carbon_Weave"], body_grp)
         add_strut(f"Susp_RPull_{side}", (side * 0.13, 0.17, -1.66), (rhub[0], rhub[1] + 0.08, rhub[2]), 0.026, 0.011, mats["Carbon_Weave"], body_grp)
 
-    # 9. Deformable 4-Element Airfoil Front Wing (`Front_Wing_Group` at local origin, placed at (0, 0.068, 2.52))
+    # 9. Deformable 4-Element Airfoil Front Wing + 14 Slot-Gap Separator Brackets (`Front_Wing_Group` at local origin, placed at (0, 0.068, 2.52))
     fw_grp = bpy.data.objects.new("Front_Wing_Group", None)
     bpy.context.collection.objects.link(fw_grp)
     fw_grp.parent = body_grp
     fw_grp.location = P(0, 0.068, 2.52)
 
-    make_mesh_obj("FW_Main", build_airfoil_bmesh(1.94, 0.26, 0.14, 0.06, spoon_dip=0.024, sweep_z=0.10, dihedral=0.02, span_segs=28), mats["Carbon_Weave"], parent=fw_grp, bevel_w=0.002)
+    make_mesh_obj("FW_Main", build_airfoil_bmesh(1.94, 0.26, 0.14, 0.06, spoon_dip=0.024, sweep_z=0.10, dihedral=0.02, span_segs=32), mats["Carbon_Weave"], parent=fw_grp, bevel_w=0.002)
     for idx_fl, (fy, fz, fc, fa, mat_k) in enumerate([(0.042, -0.08, 0.17, 0.18, "Paint_Solid"), (0.088, -0.16, 0.14, 0.30, "Paint_Solid"), (0.136, -0.23, 0.11, 0.42, "Carbon_Weave")]):
-        make_mesh_obj(f"FW_Flap_{idx_fl}", build_airfoil_bmesh(1.90, fc, 0.13, fa, spoon_dip=0.018, sweep_z=0.11, dihedral=0.025, span_segs=24, offset=(0, fy, fz)), mats[mat_k], parent=fw_grp, bevel_w=0.002)
+        make_mesh_obj(f"FW_Flap_{idx_fl}", build_airfoil_bmesh(1.90, fc, 0.13, fa, spoon_dip=0.018, sweep_z=0.11, dihedral=0.025, span_segs=28, offset=(0, fy, fz)), mats[mat_k], parent=fw_grp, bevel_w=0.002)
 
     for side in (-1, 1):
         add_tube_curve(f"FW_Endplate_{side}", [(side * 0.95, 0.01, -0.10), (side * 0.98, 0.09, -0.12), (side * 0.99, 0.22, -0.15), (side * 0.96, 0.31, -0.20)], 0.078, mats["Paint_Solid"], fw_grp, scale_x_around=(side * 0.97, 0.16))
         make_mesh_obj(f"FW_Dive_{side}", build_airfoil_bmesh(0.075, 0.22, 0.16, 0.24, span_segs=5, offset=(side * 1.01, 0.15, -0.12)), mats["Carbon_Weave"], parent=fw_grp)
         add_strut(f"FW_Pylon_{side}", (side * 0.085, 0.01, 0.02), (side * 0.075, 0.13, 0.06), 0.16, 0.014, mats["Carbon_Weave"], fw_grp)
+        # 7 Metallic Slot-Gap Separator Brackets per side (14 total)
+        for b_idx, bx_pos in enumerate((0.22, 0.36, 0.48, 0.60, 0.72, 0.82, 0.90)):
+            add_strut(f"FW_SlotBracket_{side}_{b_idx}", (side * bx_pos, 0.015, -0.02), (side * bx_pos, 0.145, -0.24), 0.024, 0.005, mats["Carbon_Weave"], fw_grp)
 
     # 10. Mobile DRS Flap (`DRS_Flap_Group` at (0, 0.955, -2.35))
     drs_grp = bpy.data.objects.new("DRS_Flap_Group", None)
     bpy.context.collection.objects.link(drs_grp)
     drs_grp.parent = body_grp
     drs_grp.location = P(0, 0.955, -2.35)
-    make_mesh_obj("DRS_Airfoil", build_airfoil_bmesh(1.18, 0.22, 0.13, 0.44, spoon_dip=0.022, sweep_z=0.04, span_segs=24, offset=(0, 0.015, 0.03)), mats["Paint_Solid"], parent=drs_grp, bevel_w=0.002)
+    make_mesh_obj("DRS_Airfoil", build_airfoil_bmesh(1.18, 0.22, 0.13, 0.44, spoon_dip=0.022, sweep_z=0.04, span_segs=28, offset=(0, 0.015, 0.03)), mats["Paint_Solid"], parent=drs_grp, bevel_w=0.002)
 
-    # 11. Butterfly Steering Wheel + Driver Gloves (`Steer_Wheel_Group` at (0, 0.67, 0.54))
+    # 11. Butterfly Steering Wheel + Rotary Dials + Shift Paddles + Driver Gloves (`Steer_Wheel_Group` at (0, 0.67, 0.54))
     sw_grp = bpy.data.objects.new("Steer_Wheel_Group", None)
     bpy.context.collection.objects.link(sw_grp)
     sw_grp.parent = body_grp
@@ -752,8 +792,12 @@ def generate_f1_glb(out_filename: str, subsurf_lvl: int):
         for l in f.loops:
             l[uv_sw].uv = (0.5, 0.5)
     make_mesh_obj("SW_Chassis", bm_sw, mats["Carbon_Weave"], parent=sw_grp, bevel_w=0.004)
+    # 3 Central Rotary Differential/Brake-Balance Dials
+    for d_idx, dx_pos in enumerate((-0.042, 0.0, 0.042)):
+        add_strut(f"SW_Rotary_{d_idx}", (dx_pos, -0.026, -0.010), (dx_pos, -0.026, -0.022), 0.016, 0.016, mats["Paint_Accent"], sw_grp)
     for side in (-1, 1):
         add_tube_curve(f"SW_Grip_{side}", [(side * 0.114, -0.05, -0.004), (side * 0.114, 0.05, -0.004)], 0.018, mats["Carbon_Weave"], sw_grp)
+        add_strut(f"SW_Paddle_{side}", (side * 0.072, 0.005, 0.018), (side * 0.098, 0.028, 0.026), 0.042, 0.006, mats["Carbon_Weave"], sw_grp)
         add_tube_curve(f"Driver_Arm_{side}", [(side * 0.145, -0.06, -0.28), (side * 0.125, -0.02, -0.10), (side * 0.116, -0.004, -0.01)], 0.028, mats["Paint_Accent"], sw_grp)
 
     # 12. 4 Wheel Assemblies (built at origin for clean cloning/pivoting in Three.js!)

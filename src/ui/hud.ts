@@ -141,14 +141,18 @@ export class HUDController {
       if (el) el.textContent = val;
     };
 
-    // Header & Buttons
+    // Header & Navigation Dock Buttons
     setText('btn-lang-toggle', tr.langToggleBtn);
     setText('btn-wiki-lang', tr.langToggleBtn);
-    setText('btn-open-wiki-menu', tr.wikiBtnMenu);
+    setText('ui-nav-play', tr.navPlay);
+    setText('ui-nav-garage', tr.navGarage);
+    setText('ui-nav-wiki', tr.navWiki);
+    setText('ui-nav-settings', tr.navSettings);
+    setText('btn-map-vector', tr.mapViewVector);
+    setText('btn-map-satellite', tr.mapViewSatellite);
     setText('btn-open-wiki-pause', tr.wikiBtnPause);
     setText('ui-subtitle', tr.subtitle);
     setText('ui-zoom-hint', tr.zoomHint);
-    setText('btn-open-settings-menu', tr.settingsProBtn);
     setText('btn-mute-menu', isMuted ? tr.audioOff : tr.audioOn);
 
     // Left Panel
@@ -470,6 +474,17 @@ export class HUDController {
     (document.getElementById('bar-boost') as HTMLElement).style.width = `${team.uiStats.aero}%`;
   }
 
+  public mapPreviewMode: 'vector' | 'satellite' = 'vector';
+
+  public setMapPreviewMode(mode: 'vector' | 'satellite'): void {
+    this.mapPreviewMode = mode;
+    document.getElementById('btn-map-vector')?.classList.toggle('active', mode === 'vector');
+    document.getElementById('btn-map-satellite')?.classList.toggle('active', mode === 'satellite');
+    if (this.cachedTracks.length) {
+      this.updateSelectedTrackUI(this.cachedTracks[this.cachedTrackIdx], this.cachedTrackIdx);
+    }
+  }
+
   updateSelectedTrackUI(trackCfg: TrackConfig, activeIdx: number): void {
     this.cachedTrackIdx = activeIdx;
     const tr = this.t();
@@ -477,14 +492,75 @@ export class HUDController {
     document.getElementById('meta-env')!.textContent = tr.trackEnvs[trackCfg.id] || trackCfg.environment;
     document.getElementById('meta-laps')!.textContent = `${trackCfg.laps} ${tr.lapsUnit}`;
 
+    const satImg = document.getElementById('track-satellite-img') as HTMLImageElement | null;
+    const pipImg = document.getElementById('track-satellite-pip') as HTMLImageElement | null;
+    const isMonza = trackCfg.id === 'monza';
+
+    if (satImg && pipImg) {
+      if (isMonza) {
+        pipImg.classList.remove('hidden');
+        if (this.mapPreviewMode === 'satellite') {
+          satImg.src = '/assets/monza_satellite.jpg';
+          satImg.classList.remove('hidden');
+          this.previewCanvas.classList.add('hidden');
+          pipImg.src = '/assets/monza_map_diagram.jpg';
+        } else {
+          satImg.classList.add('hidden');
+          this.previewCanvas.classList.remove('hidden');
+          pipImg.src = '/assets/monza_satellite.jpg';
+        }
+      } else {
+        satImg.classList.add('hidden');
+        this.previewCanvas.classList.remove('hidden');
+        pipImg.classList.add('hidden');
+      }
+    }
+
     const ctrl = trackCfg.points.map(([x, y, z]) => new THREE.Vector3(x, y, z));
     const curve = new THREE.CatmullRomCurve3(ctrl, true, 'centripetal', 0.5);
-    const pts = curve.getSpacedPoints(160);
-    this._drawSpline2D(this.previewCtx, this.previewCanvas.width, this.previewCanvas.height, pts, 10, trackCfg.theme === 'city' ? '#00f0ff' : '#ff2e24');
+    const pts = curve.getSpacedPoints(180);
+    this._drawSpline2D(
+      this.previewCtx,
+      this.previewCanvas.width,
+      this.previewCanvas.height,
+      pts,
+      16,
+      trackCfg.theme === 'city' ? '#00f0ff' : '#ff2e24',
+      trackCfg.theme,
+      this.mapPreviewMode === 'satellite' && !isMonza
+    );
   }
 
-  private _drawSpline2D(ctx: CanvasRenderingContext2D, w: number, h: number, pts: THREE.Vector3[], pad: number, strokeColor: string) {
+  private _drawSpline2D(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    pts: THREE.Vector3[],
+    pad: number,
+    strokeColor: string,
+    theme = 'monza',
+    satelliteBg = false
+  ) {
     ctx.clearRect(0, 0, w, h);
+    if (satelliteBg) {
+      const grad = ctx.createRadialGradient(w * 0.5, h * 0.5, 10, w * 0.5, h * 0.5, w * 0.65);
+      if (theme === 'desert') {
+        grad.addColorStop(0, '#7c5333');
+        grad.addColorStop(1, '#3d2514');
+      } else if (theme === 'alpine') {
+        grad.addColorStop(0, '#2a4a34');
+        grad.addColorStop(1, '#14261a');
+      } else if (theme === 'city') {
+        grad.addColorStop(0, '#101c30');
+        grad.addColorStop(1, '#060b14');
+      } else {
+        grad.addColorStop(0, '#1f4424');
+        grad.addColorStop(1, '#0e2412');
+      }
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
+
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     for (const p of pts) {
       if (p.x < minX) minX = p.x;
@@ -509,12 +585,22 @@ export class HUDController {
       else ctx.lineTo(x, y);
     });
     ctx.closePath();
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-    ctx.lineWidth = 7;
+    ctx.strokeStyle = satelliteBg ? 'rgba(255,255,255,0.34)' : 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 9;
     ctx.stroke();
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2.8;
+    ctx.lineWidth = 3.4;
     ctx.stroke();
+
+    // Start/Finish marker dot
+    if (pts.length > 0) {
+      const sx = ox + (pts[0].x - minX) * scale;
+      const sy = oz + (pts[0].z - minZ) * scale;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(sx, sy, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
   }
 

@@ -183,6 +183,10 @@ def build_gt_safety_car():
         add_box(f"SC_Endplate_{sx}", sx * 0.89, 1.10, -2.10, 0.025, 0.21, 0.36, m_carbon, root, bevel_w=0.004)
         add_box(f"SC_Headlight_{sx}", sx * 0.72, 0.53, 2.13, 0.26, 0.062, 0.14, m_hl, root, bevel_w=0.01)
         add_box(f"SC_Mirror_{sx}", sx * 0.97, 0.88, 0.44, 0.15, 0.08, 0.18, m_paint, root, bevel_w=0.02)
+        # Front Bumper Carbon Aero Dive-Planes / Canards + V8 Hood Heat Extractor Louvers
+        add_box(f"SC_Canard_Upper_{sx}", sx * 0.92, 0.32, 2.14, 0.16, 0.018, 0.24, m_carbon, root, rot_x=0.22, bevel_w=0.003)
+        add_box(f"SC_Canard_Lower_{sx}", sx * 0.94, 0.22, 2.18, 0.18, 0.018, 0.26, m_carbon, root, rot_x=0.18, bevel_w=0.003)
+        add_box(f"SC_Hood_Vent_{sx}", sx * 0.38, 0.76, 1.32, 0.24, 0.024, 0.44, m_carbon, root, rot_x=0.08, bevel_w=0.004)
 
     for d in (-3, -2, -1, 1, 2, 3):
         add_box(f"SC_Diff_Fin_{d}", d * 0.20, 0.19, -2.20, 0.022, 0.16, 0.36, m_carbon, root, bevel_w=0.003)
@@ -208,7 +212,7 @@ def build_gt_safety_car():
     bm_lb = bmesh.new()
     for sx in (-0.36, 0.36):
         b_pod = bmesh.new()
-        bmesh.ops.create_uvsphere(b_pod, u_segments=16, v_segments=10, radius=1.0)
+        bmesh.ops.create_uvsphere(b_pod, u_segments=20, v_segments=12, radius=1.0)
         for v in b_pod.verts:
             v.co = P(sx + v.co.x * 0.24, 1.275 + v.co.z * 0.048, -0.16 + v.co.y * 0.10)
         for f in b_pod.faces:
@@ -216,10 +220,10 @@ def build_gt_safety_car():
         b_pod.free()
     make_mesh_obj("scLightbar", bm_lb, m_strobe, parent=root, smooth=True)
 
-    # Quad Chrome Exhausts + 4 Forged 10-Spoke Concave GT Wheels
+    # Quad Chrome Exhausts + 4 Forged 10-Spoke Concave GT Wheels + Internal Brake Rotors
     for idx_e, ex in enumerate((-0.62, -0.49, 0.49, 0.62)):
         bm_p = bmesh.new()
-        segs = 16
+        segs = 20
         rf = [bm_p.verts.new(P(ex + math.cos(a)*0.048, 0.22 + math.sin(a)*0.048, -2.18)) for a in [k/segs*math.pi*2 for k in range(segs)]]
         rb = [bm_p.verts.new(P(ex + math.cos(a)*0.048, 0.22 + math.sin(a)*0.048, -2.36)) for a in [k/segs*math.pi*2 for k in range(segs)]]
         for k in range(segs):
@@ -231,7 +235,7 @@ def build_gt_safety_car():
     for idx_w, (wx, wz) in enumerate([(-0.94, 1.38), (0.94, 1.38), (-0.96, -1.38), (0.96, -1.38)]):
         bm_wt = bmesh.new()
         prof = [(-0.14, 0.24), (-0.13, 0.345), (-0.09, 0.356), (0.09, 0.356), (0.13, 0.345), (0.14, 0.24)]
-        segs = 32
+        segs = 40
         rings = [[bm_wt.verts.new(P(wx + ox, 0.356 + math.cos(s/segs*math.pi*2)*r, wz + math.sin(s/segs*math.pi*2)*r)) for s in range(segs)] for ox, r in prof]
         for i in range(len(rings) - 1):
             for s in range(segs):
@@ -240,14 +244,25 @@ def build_gt_safety_car():
         bmesh.ops.recalc_face_normals(bm_wt, faces=bm_wt.faces)
         make_mesh_obj(f"SC_Tire_{idx_w}", bm_wt, m_tire, parent=root)
 
+        # Internal Ventilated Brake Rotor
+        bm_bd = bmesh.new()
+        d_segs = 28
+        rf_d = [bm_bd.verts.new(P(wx + math.copysign(0.08, wx), 0.356 + math.cos(s/d_segs*math.pi*2)*0.20, wz + math.sin(s/d_segs*math.pi*2)*0.20)) for s in range(d_segs)]
+        rb_d = [bm_bd.verts.new(P(wx + math.copysign(0.04, wx), 0.356 + math.cos(s/d_segs*math.pi*2)*0.20, wz + math.sin(s/d_segs*math.pi*2)*0.20)) for s in range(d_segs)]
+        for s in range(d_segs):
+            sn = (s + 1) % d_segs
+            bm_bd.faces.new((rf_d[s], rb_d[s], rb_d[sn], rf_d[sn]))
+        bmesh.ops.recalc_face_normals(bm_bd, faces=bm_bd.faces)
+        make_mesh_obj(f"SC_BrakeDisc_{idx_w}", bm_bd, m_carbon, parent=root)
+
         out_x = wx + math.copysign(0.128, wx)
-        for sp in range(5):
-            ang = (sp / 5.0) * math.pi
+        for sp in range(10):
+            ang = (sp / 10.0) * math.pi
             bm_sp = bmesh.new()
             bmesh.ops.create_cube(bm_sp, size=1.0)
             for v in bm_sp.verts:
                 ly = v.co.z * 0.47
-                lz = v.co.y * 0.036
+                lz = v.co.y * 0.024
                 ry = ly * math.cos(ang) - lz * math.sin(ang)
                 rz = ly * math.sin(ang) + lz * math.cos(ang)
                 v.co = P(out_x + v.co.x * 0.024, 0.356 + ry, wz + rz)
@@ -279,33 +294,42 @@ def build_tv_helicopter():
         ( 1.35, 0.82, 0.68, -0.58, 0.82, 1.08),
         ( 2.25, 0.52, 0.40, -0.42, 0.28, 1.05),
         ( 2.68, 0.20, 0.14, -0.26, 0.02, 1.02),
-    ], ring_pts=28)
+    ], ring_pts=34)
     make_mesh_obj("Heli_Fuselage", fuse_bm, m_body, parent=root, subsurf=2)
 
     can_bm = build_loft_bmesh([
         (0.20, 0.78, 0.66, 0.10, 1.08, 1.06),
         (1.30, 0.76, 0.62, -0.25, 0.82, 1.06),
         (2.35, 0.46, 0.34, -0.35, 0.24, 1.04),
-    ], ring_pts=24)
+    ], ring_pts=28)
     make_mesh_obj("Heli_Canopy", can_bm, m_glass, parent=root, subsurf=2)
 
     add_box("Heli_Tailboom", 0, 0.48, -3.95, 0.30, 0.32, 3.80, m_body, root, bevel_w=0.06)
     add_box("Heli_HStab", 0, 0.48, -4.60, 2.15, 0.06, 0.36, m_acc, root, bevel_w=0.01)
     add_box("Heli_VFin", 0, 1.18, -5.75, 0.12, 1.35, 0.68, m_acc, root, bevel_w=0.02)
+    # Fenestron Shrouded Tail Rotor Ring & Hub + Endplate Winglets
+    add_box("Heli_HStab_EndL", -1.08, 0.50, -4.60, 0.04, 0.38, 0.34, m_acc, root, bevel_w=0.008)
+    add_box("Heli_HStab_EndR",  1.08, 0.50, -4.60, 0.04, 0.38, 0.34, m_acc, root, bevel_w=0.008)
+    bm_fen = bmesh.new()
+    bmesh.ops.create_cone(bm_fen, cap_ends=True, cap_tris=False, segments=24, radius1=0.42, radius2=0.42, depth=0.18)
+    for v in bm_fen.verts:
+        v.co = P(v.co.z, 0.82 + v.co.x, -5.65 + v.co.y)
+    make_mesh_obj("Heli_Fenestron_Hub", bm_fen, m_dark, parent=root)
 
     for sx in (-0.82, 0.82):
         add_box(f"Heli_Skid_{sx}", sx, -1.16, 0.35, 0.08, 0.08, 3.35, m_dark, root, bevel_w=0.02)
+        add_box(f"Heli_Step_{sx}", sx * 0.92, -0.92, 0.55, 0.12, 0.03, 0.85, m_dark, root, bevel_w=0.006)
         add_box(f"Heli_StrutF_{sx}", sx * 0.82, -0.84, 1.10, 0.07, 0.65, 0.07, m_dark, root)
         add_box(f"Heli_StrutR_{sx}", sx * 0.82, -0.84, -0.55, 0.07, 0.65, 0.07, m_dark, root)
 
     bm_cam = bmesh.new()
-    bmesh.ops.create_uvsphere(bm_cam, u_segments=14, v_segments=10, radius=0.24)
+    bmesh.ops.create_uvsphere(bm_cam, u_segments=18, v_segments=14, radius=0.24)
     for v in bm_cam.verts:
         v.co = P(v.co.x, -0.58 + v.co.z, 2.48 + v.co.y)
     make_mesh_obj("Heli_Cineflex", bm_cam, m_dark, parent=root)
 
     bm_bc = bmesh.new()
-    bmesh.ops.create_uvsphere(bm_bc, u_segments=12, v_segments=8, radius=0.11)
+    bmesh.ops.create_uvsphere(bm_bc, u_segments=14, v_segments=10, radius=0.11)
     for v in bm_bc.verts:
         v.co = P(v.co.x, 1.22 + v.co.z, -0.45 + v.co.y)
     make_mesh_obj("Heli_Strobe", bm_bc, m_beacon, parent=root)
@@ -314,6 +338,13 @@ def build_tv_helicopter():
     bpy.context.collection.objects.link(rotor_grp)
     rotor_grp.parent = root
     rotor_grp.location = P(0, 1.48, 0.15)
+    # Rotor Mast & Swashplate Hub Cap
+    bm_hub = bmesh.new()
+    bmesh.ops.create_cone(bm_hub, cap_ends=True, cap_tris=False, segments=20, radius1=0.28, radius2=0.16, depth=0.32)
+    for v in bm_hub.verts:
+        v.co = P(v.co.x, -0.10 + v.co.z, v.co.y)
+    make_mesh_obj("Rotor_Swashplate_Hub", bm_hub, m_dark, parent=rotor_grp)
+
     for b in range(4):
         ang = (b / 4.0) * math.pi * 2.0
         bm_bl = bmesh.new()
@@ -345,7 +376,7 @@ def build_scenery_nature():
         ("Cliff_Boulder_B", 8.3, 5.4, 8.6, 5.0),
     ]):
         bm = bmesh.new()
-        bmesh.ops.create_icosphere(bm, subdivisions=3, radius=1.0)
+        bmesh.ops.create_icosphere(bm, subdivisions=4, radius=1.0)
         uv_l = bm.loops.layers.uv.new("UVMap")
 
         for v in bm.verts:
@@ -353,8 +384,9 @@ def build_scenery_nature():
             strata = math.sin(ny * 7.5 + math.sin(nx * 3.2 + seed_off) * 1.4) * 0.14
             crag1 = math.sin(nx * 4.1 + seed_off) * math.cos(nz * 3.9 - seed_off) * 0.22
             crag2 = abs(math.sin((nx * 8.3 + ny * 6.7 + nz * 7.9) + seed_off)) * 0.12
+            micro = math.sin(nx * 17.0 - ny * 14.0 + nz * 19.0) * 0.035
             base_flat = 0.55 if ny < -0.35 else 1.0
-            disp = 1.0 + strata + crag1 - crag2
+            disp = 1.0 + strata + crag1 - crag2 + micro
             fx = nx * sx * disp
             fy = max(-0.4, (ny + 0.55) * sy * disp * base_flat)
             fz = nz * sz * disp
@@ -375,20 +407,20 @@ def build_scenery_nature():
 
         make_mesh_obj(name, bm, m_rock, smooth=True)
 
-    # 16 curved tapered 3-segment 3D blades in a 1.4m patch (96 tris/clump -> 60+ FPS instancing!)
+    # 26 curved tapered 4-segment 3D blades in a 1.4m patch
     bm_gr = bmesh.new()
     uv_gr = bm_gr.loops.layers.uv.new("UVMap")
     rng = random.Random(4242)
-    for b in range(16):
-        bx = (rng.random() - 0.5) * 1.35
-        bz = (rng.random() - 0.5) * 1.35
+    for b in range(26):
+        bx = (rng.random() - 0.5) * 1.38
+        bz = (rng.random() - 0.5) * 1.38
         yaw = rng.random() * math.pi * 2.0
-        lean = 0.22 + rng.random() * 0.40
-        h = 0.34 + rng.random() * 0.44
-        w0 = 0.040 + rng.random() * 0.024
+        lean = 0.22 + rng.random() * 0.42
+        h = 0.34 + rng.random() * 0.46
+        w0 = 0.038 + rng.random() * 0.024
         dx, dz = math.cos(yaw), math.sin(yaw)
         px, pz = -dz, dx
-        segs_g = 3
+        segs_g = 4
         pts_l = []
         pts_r = []
         for s in range(segs_g + 1):

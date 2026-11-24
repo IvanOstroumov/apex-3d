@@ -4,8 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>APEX GP 3D — AAA Formula 1 Simulator (240Hz)</title>
-  <script type="module" crossorigin src="./assets/index-BZx-UJ7N.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-BghdVbI9.css">
+  <script type="module" crossorigin src="./assets/index-BkxmMLkd.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-D8D3KQP5.css">
 </head>
 <body>
   <div id="canvas-container"></div>
@@ -17,31 +17,45 @@
     <header class="menu-header">
       <div class="brand">
         <span class="brand-badge">F1</span>
-        <div>
-          <h1>APEX GP <span class="accent">3D</span> <span class="aaa-chip">240HZ AAA ENGINE</span></h1>
-          <p id="ui-subtitle" class="subtitle">GOMME MULTI-STRATO • EFFETTO SUOLO • HDR BLOOM • 60+ FPS</p>
-        </div>
+        <h1>APEX GP <span class="accent">3D</span></h1>
       </div>
       <div class="header-hints">
         <span id="license-pill" class="hint-pill license-tag" title="Patente Pilota FIA (Safety &amp; Skill Rating)">🪪 LICENZA S • 1500 SR</span>
-        <span id="ui-zoom-hint" class="hint-pill">🖱️ 360° • Zoom</span>
         <span id="gamepad-pill" class="hint-pill hidden">🎮 Gamepad</span>
-        <button id="btn-open-wiki-menu" class="icon-btn wiki-btn" title="Enciclopedia &amp; Guida Meccaniche F1 (W)">📖 WIKI F1</button>
-        <button id="btn-open-settings-menu" class="icon-btn settings-pro-btn" title="Impostazioni Avanzate Simulatore (O)">⚙️ IMPOSTAZIONI PRO</button>
         <button id="btn-lang-toggle" class="icon-btn lang-btn" title="Cambia Lingua / Switch Language (IT / EN)">🇮🇹 IT</button>
         <button id="btn-mute-menu" class="icon-btn" title="Attiva/Disattiva Audio (M)">🔊 Audio ON</button>
       </div>
     </header>
 
     <div class="menu-body">
-      <!-- Left Panel: Team, Specs, Compound, Setup Engineer & Assists -->
-      <aside class="panel panel-left">
+      <!-- Left Main Navigation Dock (Play, Garage, Wiki, Settings) -->
+      <nav class="menu-nav-dock">
+        <button id="nav-btn-play" class="nav-dock-btn nav-play-cta">
+          <span class="nav-dock-icon">▶</span>
+          <span id="ui-nav-play">▶ GIOCA</span>
+        </button>
+        <button id="nav-btn-garage" class="nav-dock-btn active">
+          <span class="nav-dock-icon">🏎️</span>
+          <span id="ui-nav-garage">🏎️ GARAGE F1</span>
+        </button>
+        <button id="btn-open-wiki-menu" class="nav-dock-btn" title="Enciclopedia &amp; Guida Meccaniche F1 (W)">
+          <span class="nav-dock-icon">📖</span>
+          <span id="ui-nav-wiki">📖 WIKI F1</span>
+        </button>
+        <button id="btn-open-settings-menu" class="nav-dock-btn" title="Impostazioni Avanzate Simulatore (O)">
+          <span class="nav-dock-icon">⚙️</span>
+          <span id="ui-nav-settings">⚙️ IMPOSTAZIONI</span>
+        </button>
+      </nav>
+
+      <!-- VIEW 1: 3D GARAGE / SHOWROOM (10 Scuderias + Engineer Setup, Zero Scrollbars) -->
+      <aside id="menu-view-garage" class="panel panel-garage">
         <div class="panel-title">
           <span class="step-num">01</span>
-          <h2 id="ui-panel1-title">SCUDERIA &amp; INGEGNERE ASSETTO</h2>
+          <h2 id="ui-panel1-title">10 SCUDERIE &amp; INGEGNERE ASSETTO</h2>
         </div>
 
-        <div id="team-list" class="team-list"></div>
+        <div id="team-list" class="team-list-grid"></div>
 
         <div class="car-specs">
           <div class="car-specs-head">
@@ -71,14 +85,16 @@
           </div>
         </div>
 
-        <div class="setup-row">
-          <span id="ui-compound-label" class="setup-label">MESCOLA</span>
-          <div id="compound-pills" class="pill-group">
-            <button class="pill-btn active" data-compound="soft" style="--pill-c:#ff2424">S</button>
-            <button class="pill-btn" data-compound="medium" style="--pill-c:#ffd200">M</button>
-            <button class="pill-btn" data-compound="hard" style="--pill-c:#f2f5fa">H</button>
-            <button class="pill-btn" data-compound="inter" style="--pill-c:#22e56b">I</button>
-            <button class="pill-btn" data-compound="wet" style="--pill-c:#00a8ff">W</button>
+        <div class="setup-row-clean">
+          <div class="setup-compound-group">
+            <span id="ui-compound-label" class="setup-label">MESCOLA</span>
+            <div id="compound-pills" class="pill-group">
+              <button class="pill-btn active" data-compound="soft" style="--pill-c:#ff2424">S</button>
+              <button class="pill-btn" data-compound="medium" style="--pill-c:#ffd200">M</button>
+              <button class="pill-btn" data-compound="hard" style="--pill-c:#f2f5fa">H</button>
+              <button class="pill-btn" data-compound="inter" style="--pill-c:#22e56b">I</button>
+              <button class="pill-btn" data-compound="wet" style="--pill-c:#00a8ff">W</button>
+            </div>
           </div>
           <select id="opt-setup" class="mini-select" title="Ingegnere di Assetto">
             <option value="balanced" selected>Assetto: Bilanciato</option>
@@ -116,57 +132,66 @@
         </div>
       </aside>
 
-      <!-- Right Panel: Mode, Track, Weather, Reverse, Quality & Launch -->
-      <aside class="panel panel-right">
-        <div class="panel-title">
-          <span class="step-num">02</span>
-          <h2 id="ui-panel2-title">MODALITÀ &amp; CIRCUITO</h2>
-        </div>
-
-        <div id="mode-tabs" class="mode-tabs">
-          <button class="mode-btn active" data-mode="quick_race">GARA</button>
-          <button class="mode-btn" data-mode="weekend">QUALIFICA+GP</button>
-          <button class="mode-btn" data-mode="championship">CAMPIONATO</button>
-          <button class="mode-btn" data-mode="time_attack">TIME ATTACK</button>
-        </div>
-
-        <div id="track-list" class="track-list"></div>
-
-        <div class="track-preview-card">
-          <canvas id="track-preview-canvas" width="240" height="78"></canvas>
-          <div class="track-meta">
-            <div><span id="ui-meta-env" class="meta-k">AMBIENTE</span><span id="meta-env" class="meta-v">Diurno</span></div>
-            <div><span id="ui-meta-session" class="meta-k">SESSIONE</span><span id="meta-laps" class="meta-v">3 Giri</span></div>
-            <div><span id="ui-meta-layout" class="meta-k">LAYOUT</span><label class="rev-label"><input type="checkbox" id="opt-reverse" /> <span id="ui-meta-rev">Invertito</span></label></div>
+      <!-- VIEW 2: DEDICATED PLAY / RACE & CIRCUIT HUB (2D Map + Satellite View, Zero Scrollbars) -->
+      <section id="menu-view-play" class="panel panel-play-hub hidden">
+        <div class="play-hub-header">
+          <div class="panel-title">
+            <span class="step-num">02</span>
+            <h2 id="ui-panel2-title">MODALITÀ DI GARA &amp; CIRCUITO</h2>
+          </div>
+          <div id="mode-tabs" class="mode-tabs-wide">
+            <button class="mode-btn active" data-mode="quick_race">GARA VELOCE</button>
+            <button class="mode-btn" data-mode="weekend">QUALIFICA+GP</button>
+            <button class="mode-btn" data-mode="championship">CAMPIONATO</button>
+            <button class="mode-btn" data-mode="time_attack">TIME ATTACK</button>
           </div>
         </div>
 
-        <div class="config-selects">
-          <select id="opt-weather" class="mini-select" title="Meteo">
-            <option value="dry" selected>☀️ Asciutto</option>
-            <option value="overcast">⛅ Nuvoloso</option>
-            <option value="rain">🌧️ Pioggia</option>
-            <option value="dynamic">🌦️ Dinamico</option>
-          </select>
-          <select id="opt-difficulty" class="mini-select" title="Difficoltà AI">
-            <option value="rookie">AI: Rookie</option>
-            <option value="pro" selected>AI: Pro</option>
-            <option value="ace">AI: Esperto</option>
-            <option value="legend">AI: Leggenda</option>
-          </select>
-          <select id="opt-quality" class="mini-select" title="Qualità Grafica">
-            <option value="low">FPS: Basso</option>
-            <option value="medium">Grafica: Medio</option>
-            <option value="high" selected>Grafica: Alto</option>
-            <option value="ultra">Grafica: Ultra</option>
-          </select>
-        </div>
+        <div class="play-hub-grid">
+          <div class="play-hub-left">
+            <div id="track-list" class="track-list"></div>
 
-        <button id="btn-start-race" class="btn-primary-launch">
-          <span id="ui-launch-btn">SCENDI IN PISTA</span>
-          <span class="launch-arrow">▶</span>
-        </button>
-      </aside>
+            <div class="config-selects-two">
+              <select id="opt-weather" class="mini-select" title="Meteo">
+                <option value="dry" selected>☀️ Asciutto</option>
+                <option value="overcast">⛅ Nuvoloso</option>
+                <option value="rain">🌧️ Pioggia</option>
+                <option value="dynamic">🌦️ Dinamico</option>
+              </select>
+              <select id="opt-difficulty" class="mini-select" title="Difficoltà AI">
+                <option value="rookie">AI: Rookie</option>
+                <option value="pro" selected>AI: Pro</option>
+                <option value="ace">AI: Esperto</option>
+                <option value="legend">AI: Leggenda</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="play-hub-right">
+            <div class="track-preview-card-large">
+              <div class="map-view-toolbar">
+                <button id="btn-map-vector" class="map-toggle-btn active" type="button">📐 MAPPA 2D</button>
+                <button id="btn-map-satellite" class="map-toggle-btn" type="button">🛰️ SATELLITE REALE</button>
+              </div>
+              <div class="map-stage-box">
+                <canvas id="track-preview-canvas" width="340" height="175"></canvas>
+                <img id="track-satellite-img" class="track-satellite-img hidden" src="./assets/monza_satellite.jpg" alt="Satellite View" />
+                <img id="track-satellite-pip" class="track-satellite-pip" src="./assets/monza_satellite.jpg" alt="Aerial Thumbnail" title="Clicca per ingrandire Vista Satellitare" />
+              </div>
+              <div class="track-meta">
+                <div><span id="ui-meta-env" class="meta-k">AMBIENTE</span><span id="meta-env" class="meta-v">Diurno</span></div>
+                <div><span id="ui-meta-session" class="meta-k">SESSIONE</span><span id="meta-laps" class="meta-v">3 Giri</span></div>
+                <div><span id="ui-meta-layout" class="meta-k">LAYOUT</span><label class="rev-label"><input type="checkbox" id="opt-reverse" /> <span id="ui-meta-rev">Invertito</span></label></div>
+              </div>
+            </div>
+
+            <button id="btn-start-race" class="btn-primary-launch">
+              <span id="ui-launch-btn">SCENDI IN PISTA</span>
+              <span class="launch-arrow">▶</span>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -361,6 +386,15 @@
       <!-- TAB 1: GRAPHICS & POST-PROCESSING -->
       <div class="set-pane active" id="set-pane-gfx">
         <div class="set-grid">
+          <label class="set-item">
+            <div class="set-label"><span>Preset Qualità Grafica / Graphics Preset</span><strong>PBR</strong></div>
+            <select id="opt-quality" class="mini-select" title="Qualità Grafica">
+              <option value="low">FPS: Basso</option>
+              <option value="medium">Grafica: Medio</option>
+              <option value="high" selected>Grafica: Alto</option>
+              <option value="ultra">Grafica: Ultra</option>
+            </select>
+          </label>
           <label class="set-item">
             <div class="set-label"><span id="ui-set-res">Scala Risoluzione (Resolution Scale)</span><strong id="lbl-set-res">115%</strong></div>
             <input type="range" id="set-res" min="50" max="175" step="5" value="115" />

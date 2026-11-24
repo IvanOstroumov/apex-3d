@@ -44,6 +44,12 @@ export interface WikiCategory {
 
 export interface I18nStrings {
   langToggleBtn: string;
+  navPlay: string;
+  navGarage: string;
+  navWiki: string;
+  navSettings: string;
+  mapViewVector: string;
+  mapViewSatellite: string;
   wikiBtnMenu: string;
   wikiBtnPause: string;
   subtitle: string;
@@ -315,16 +321,22 @@ const SVG_TIRES_DIAGRAM = `
 export const TRANSLATIONS: Record<Language, I18nStrings> = {
   it: {
     langToggleBtn: '🇮🇹 IT',
+    navPlay: '▶ GIOCA',
+    navGarage: '🏎️ GARAGE F1',
+    navWiki: '📖 WIKI F1',
+    navSettings: '⚙️ IMPOSTAZIONI',
+    mapViewVector: '📐 MAPPA 2D',
+    mapViewSatellite: '🛰️ SATELLITE REALE',
     wikiBtnMenu: '📖 WIKI F1',
     wikiBtnPause: '📖 WIKI & GUIDA MECCANICHE F1',
     subtitle: 'GOMME MULTI-STRATO • EFFETTO SUOLO • HDR BLOOM • 60+ FPS',
     zoomHint: '🖱️ 360° • Zoom',
-    settingsProBtn: '⚙️ IMPOSTAZIONI PRO',
+    settingsProBtn: '⚙️ IMPOSTAZIONI',
     audioOn: '🔊 Audio ON',
     audioOff: '🔇 Audio OFF',
     licensePrefix: '🪪 LICENZA',
 
-    panel1Title: 'SCUDERIA & INGEGNERE ASSETTO',
+    panel1Title: '10 SCUDERIE & INGEGNERE ASSETTO',
     statSpeed: 'VELOCITÀ',
     statAccel: 'ACCEL.',
     statGrip: 'GRIP',
@@ -343,8 +355,8 @@ export const TRANSLATIONS: Record<Language, I18nStrings> = {
     assistLine: 'Linea 3D',
     assistManual: 'Cambio Man.',
 
-    panel2Title: 'MODALITÀ & CIRCUITO',
-    modeQuickRace: 'GARA',
+    panel2Title: 'MODALITÀ DI GARA & CIRCUITO',
+    modeQuickRace: 'GARA VELOCE',
     modeWeekend: 'QUALIFICA+GP',
     modeChamp: 'CAMPIONATO',
     modeTimeAttack: 'TIME ATTACK',
@@ -371,10 +383,15 @@ export const TRANSLATIONS: Record<Language, I18nStrings> = {
 
     teamTaglines: {
       ferrari: 'Bilanciata, grande trazione e accelerazione',
-      monster: 'Assetto scarico, massima velocità di punta',
-      mcdonalds: 'Avantreno affilato, massima agilità nelle chicane',
       redbull: 'Massima deportanza ed efficienza aerodinamica',
-      mercedes: 'Frenata millimetrica e stabilità ad alta velocità'
+      mercedes: 'Frenata millimetrica e stabilità ad alta velocità',
+      mclaren: 'Efficienza nei curvoni veloci e carico effetto suolo',
+      aston: 'Gentile sulle gomme e trazione meccanica in uscita',
+      alpine: 'Inserimento rapido nelle varianti e DRS potente',
+      williams: 'Bassissima resistenza all’aria per rettilinei tipo Monza',
+      vcarb: 'Passo agile nei cambi di direzione e grande erogazione ERS',
+      monster: 'Assetto scarico, massima velocità di punta',
+      mcdonalds: 'Avantreno affilato, massima agilità nelle chicane'
     },
     trackBadges: {
       monza: 'ALTA VELOCITÀ',
@@ -740,16 +757,22 @@ export const TRANSLATIONS: Record<Language, I18nStrings> = {
 
   en: {
     langToggleBtn: '🇬🇧 EN',
+    navPlay: '▶ PLAY',
+    navGarage: '🏎️ F1 GARAGE',
+    navWiki: '📖 F1 WIKI',
+    navSettings: '⚙️ SETTINGS',
+    mapViewVector: '📐 2D MAP',
+    mapViewSatellite: '🛰️ SATELLITE VIEW',
     wikiBtnMenu: '📖 F1 WIKI',
     wikiBtnPause: '📖 F1 WIKI & MECHANICS GUIDE',
     subtitle: 'MULTI-LAYER TIRES • GROUND EFFECT • HDR BLOOM • 60+ FPS',
     zoomHint: '🖱️ 360° • Zoom',
-    settingsProBtn: '⚙️ PRO SETTINGS',
+    settingsProBtn: '⚙️ SETTINGS',
     audioOn: '🔊 Audio ON',
     audioOff: '🔇 Audio OFF',
     licensePrefix: '🪪 LICENSE',
 
-    panel1Title: 'TEAM & RACE ENGINEER SETUP',
+    panel1Title: '10 F1 TEAMS & RACE ENGINEER SETUP',
     statSpeed: 'TOP SPEED',
     statAccel: 'ACCEL.',
     statGrip: 'GRIP',
@@ -768,7 +791,7 @@ export const TRANSLATIONS: Record<Language, I18nStrings> = {
     assistLine: '3D Line',
     assistManual: 'Manual Gear',
 
-    panel2Title: 'GAME MODE & CIRCUIT',
+    panel2Title: 'GAME MODE & CIRCUIT HUB',
     modeQuickRace: 'QUICK RACE',
     modeWeekend: 'QUALI + GP',
     modeChamp: 'CHAMPIONSHIP',
@@ -796,10 +819,15 @@ export const TRANSLATIONS: Record<Language, I18nStrings> = {
 
     teamTaglines: {
       ferrari: 'Balanced chassis, supreme corner-exit traction',
-      monster: 'Low-drag aero package, blistering straight-line speed',
-      mcdonalds: 'Razor-sharp front end, agile in technical chicanes',
       redbull: 'Maximum ground-effect downforce & aero efficiency',
-      mercedes: 'Laser-precise braking stability & high-speed poise'
+      mercedes: 'Laser-precise braking stability & high-speed poise',
+      mclaren: 'High-speed cornering efficiency & ground-effect load',
+      aston: 'Gentle on tires with strong mechanical corner exit',
+      alpine: 'Crisp chicane turn-in & high-efficiency DRS wing',
+      williams: 'Ultra-low drag aero built for Monza-style straights',
+      vcarb: 'Agile direction changes & aggressive ERS deployment',
+      monster: 'Low-drag aero package, blistering straight-line speed',
+      mcdonalds: 'Razor-sharp front end, agile in technical chicanes'
     },
     trackBadges: {
       monza: 'HIGH SPEED',

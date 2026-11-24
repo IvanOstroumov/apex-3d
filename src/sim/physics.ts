@@ -802,13 +802,18 @@ function updateGearbox(car: CarState, isManual: boolean, dt: number) {
       car.shiftDownReq = false;
     }
   } else {
-    if (car.speed < -0.6) car.gear = -1;
-    else if (absSpd < 0.7 && car.throttleInput < 0.05) car.gear = 0;
-    else {
-      let g = 1;
-      for (let i = 1; i <= 8; i++) {
-        if (car.speed <= GEAR_MAX_SPEEDS[i]) { g = i; break; }
-        g = 8;
+    if (car.speed < -0.6) {
+      car.gear = -1;
+    } else if (absSpd < 0.7 && car.throttleInput < 0.05) {
+      car.gear = 0;
+    } else {
+      let g = car.gear <= 0 ? 1 : car.gear;
+      // Upshift at 91% of current gear max speed (before rev-limiter!), downshift at 75% of previous gear max speed
+      while (g < 8 && car.speed > GEAR_MAX_SPEEDS[g] * 0.91) {
+        g++;
+      }
+      while (g > 1 && car.speed < GEAR_MAX_SPEEDS[g - 1] * 0.75) {
+        g--;
       }
       car.gear = g;
     }
@@ -818,7 +823,7 @@ function updateGearbox(car: CarState, isManual: boolean, dt: number) {
     if (car.gear > prevGear) {
       car.justShifted = true;
       car.shiftFlameTimer = 0.11;
-      car.shiftCutTimer = 0.038; // 38ms realistic seamless shift cut!
+      car.shiftCutTimer = 0.032; // 32ms seamless shift cut
     } else {
       car.justDownshifted = true;
     }

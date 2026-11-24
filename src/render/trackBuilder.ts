@@ -2633,36 +2633,553 @@ function addGrandstandsAndPitBuilding(
     group.add(jg);
   }
 
-  // 5. Authentic 1955 Monza "Sopraelevata" High-Speed Banked Concrete Oval Overpass Bridge over the Serraglio straight!
+  // 5. FULL REAL-LIFE AUTODROMO NAZIONALE MONZA REPLICA (Based on SkySat, Google Earth 3D & Trackside Photos!)
   if (trackCfg.theme === 'monza') {
-    const serraglioSample = samples[Math.floor(N * 0.56) % N];
-    const sopGroup = new THREE.Group();
-    sopGroup.position.set(serraglioSample.pos.x, serraglioSample.asphaltY, serraglioSample.pos.z);
-    sopGroup.rotation.y = Math.atan2(serraglioSample.tangent.x, serraglioSample.tangent.z) + 0.32;
+    addMonzaPhotorealisticWorld(group, samples, N, wallOff, trackCfg.trackWidth * 0.5);
+  }
+}
 
-    const weatheredConcreteMat = new THREE.MeshStandardMaterial({
-      color: '#6e737b',
-      roughness: 0.88,
-      metalness: 0.08
-    });
-    const bankedDeck = new THREE.Mesh(new THREE.BoxGeometry(118, 1.35, 14.5), weatheredConcreteMat);
-    bankedDeck.position.set(0, 8.6, 0);
-    bankedDeck.rotation.z = 0.34; // Authentic 20+ degree high-banking tilt of the historic 1955 Sopraelevata!
-    bankedDeck.castShadow = true;
-    bankedDeck.receiveShadow = true;
-    sopGroup.add(bankedDeck);
+function createMonzaPirelliArchTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 128;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#ffd000';
+  ctx.fillRect(0, 0, 512, 128);
+  ctx.fillStyle = '#d80000';
+  ctx.fillRect(110, 18, 292, 92);
+  ctx.fillStyle = '#ffd000';
+  ctx.font = '900 58px "Arial Black", Impact, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('PIRELLI', 256, 66);
+  // Long red P-capital bar
+  ctx.fillRect(138, 28, 120, 11);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
 
-    // Vintage concrete support A-frame piers flanking the track
-    for (const px of [-46, -32, -21, 21, 32, 46]) {
-      const pierH = 8.4 + Math.sin(0.34) * px;
-      if (pierH > 2.5) {
-        const pier = new THREE.Mesh(new THREE.BoxGeometry(1.4, pierH, 11.2), weatheredConcreteMat);
-        pier.position.set(px, pierH * 0.5, 0);
-        pier.castShadow = true;
-        sopGroup.add(pier);
+function createItalianGPBarrierTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 64;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#0a0d12';
+  ctx.fillRect(0, 0, 512, 64);
+  // Italian Tricolore top & bottom pin-stripes
+  ctx.fillStyle = '#009246';
+  ctx.fillRect(0, 0, 170, 5);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(170, 0, 172, 5);
+  ctx.fillStyle = '#ce2b37';
+  ctx.fillRect(342, 0, 170, 5);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'italic 900 28px "Segoe UI", Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('#ItalianGP', 135, 34);
+
+  ctx.fillStyle = '#ffd000';
+  ctx.font = 'italic 900 28px "Segoe UI", Arial, sans-serif';
+  ctx.fillText('P ZERO', 385, 34);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  t.repeat.set(6, 1);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function addMonzaPhotorealisticWorld(
+  group: THREE.Group,
+  samples: TrackSample[],
+  N: number,
+  wallOff: number,
+  halfW: number
+): void {
+  const weatheredConcreteMat = new THREE.MeshStandardMaterial({
+    color: '#767b82',
+    roughness: 0.88,
+    metalness: 0.08
+  });
+  const emeraldRunoffMat = new THREE.MeshStandardMaterial({
+    color: '#14a668',
+    roughness: 0.65,
+    metalness: 0.05,
+    polygonOffset: true,
+    polygonOffsetFactor: -1
+  });
+  const escapeAsphaltMat = new THREE.MeshStandardMaterial({
+    color: '#2a2e35',
+    roughness: 0.78,
+    metalness: 0.08,
+    polygonOffset: true,
+    polygonOffsetFactor: -1
+  });
+  const lecaGravelMat = new THREE.MeshStandardMaterial({
+    color: '#cbb99a',
+    roughness: 0.95,
+    metalness: 0.02,
+    polygonOffset: true,
+    polygonOffsetFactor: -1
+  });
+  const astroturfMat = new THREE.MeshStandardMaterial({
+    color: '#16883c',
+    roughness: 0.82,
+    metalness: 0.04,
+    polygonOffset: true,
+    polygonOffsetFactor: -2
+  });
+
+  // 1. White & Yellow F1 Starting Grid Boxes + Pit-Exit White Line along Rettilineo Principale (Photo: Autodromo-Nazionale-Monza-800x500-1.jpg)
+  const gridPartsWhite: THREE.BufferGeometry[] = [];
+  const gridPartsYellow: THREE.BufferGeometry[] = [];
+  const startIdx = samples[0] ? 52 : 0;
+  for (let slot = 0; slot < 20; slot++) {
+    const idx = (startIdx - 2 - slot * 2 + N) % N;
+    const s = samples[idx];
+    const side = slot % 2 === 0 ? -1 : 1;
+    const lat = side * (halfW * 0.42);
+    const yaw = Math.atan2(s.tangent.x, s.tangent.z);
+
+    // White U-bracket lines
+    const frontBar = new THREE.PlaneGeometry(2.3, 0.14);
+    frontBar.rotateX(-Math.PI / 2);
+    frontBar.rotateY(yaw);
+    frontBar.translate(
+      s.pos.x + s.right.x * lat + s.tangent.x * 1.8,
+      s.asphaltY + 0.018,
+      s.pos.z + s.right.z * lat + s.tangent.z * 1.8
+    );
+    gridPartsWhite.push(normTrackGeo(frontBar));
+
+    for (const sideBr of [-1.1, 1.1]) {
+      const leg = new THREE.PlaneGeometry(0.14, 1.4);
+      leg.rotateX(-Math.PI / 2);
+      leg.rotateY(yaw);
+      leg.translate(
+        s.pos.x + s.right.x * (lat + sideBr) + s.tangent.x * 1.1,
+        s.asphaltY + 0.018,
+        s.pos.z + s.right.z * (lat + sideBr) + s.tangent.z * 1.1
+      );
+      gridPartsWhite.push(normTrackGeo(leg));
+    }
+
+    // Yellow nose alignment line extending across the grid box
+    const yellowLine = new THREE.PlaneGeometry(2.8, 0.14);
+    yellowLine.rotateX(-Math.PI / 2);
+    yellowLine.rotateY(yaw);
+    yellowLine.translate(
+      s.pos.x + s.right.x * (lat - side * 0.45) + s.tangent.x * 1.55,
+      s.asphaltY + 0.02,
+      s.pos.z + s.right.z * (lat - side * 0.45) + s.tangent.z * 1.55
+    );
+    gridPartsYellow.push(normTrackGeo(yellowLine));
+  }
+
+  // Long white Pit-Exit corridor line down the right side of the Main Straight
+  for (let k = 0; k < 58; k++) {
+    const s = samples[(startIdx - 18 + k + N) % N];
+    const yaw = Math.atan2(s.tangent.x, s.tangent.z);
+    const pitLine = new THREE.PlaneGeometry(0.18, 4.2);
+    pitLine.rotateX(-Math.PI / 2);
+    pitLine.rotateY(yaw);
+    pitLine.translate(
+      s.pos.x + s.right.x * (halfW - 3.1),
+      s.asphaltY + 0.016,
+      s.pos.z + s.right.z * (halfW - 3.1)
+    );
+    gridPartsWhite.push(normTrackGeo(pitLine));
+  }
+
+  if (gridPartsWhite.length) {
+    const mW = new THREE.Mesh(
+      mergeGeometries(gridPartsWhite, false)!,
+      new THREE.MeshBasicMaterial({ color: '#f2f5fa', polygonOffset: true, polygonOffsetFactor: -2 })
+    );
+    gridPartsWhite.forEach((g) => g.dispose());
+    group.add(mW);
+  }
+  if (gridPartsYellow.length) {
+    const mY = new THREE.Mesh(
+      mergeGeometries(gridPartsYellow, false)!,
+      new THREE.MeshBasicMaterial({ color: '#ffd000', polygonOffset: true, polygonOffsetFactor: -3 })
+    );
+    gridPartsYellow.forEach((g) => g.dispose());
+    group.add(mY);
+  }
+
+  // 2. Iconic Bright Yellow & Red PIRELLI Gantry Bridges before Turn 1 Rettifilo & on Back Straight (Photo: 1657349836.avif)
+  const pirelliTex = createMonzaPirelliArchTexture();
+  const pirelliYellowMat = new THREE.MeshStandardMaterial({ color: '#ffd000', roughness: 0.35, metalness: 0.18 });
+  const pirelliBannerMat = new THREE.MeshStandardMaterial({ map: pirelliTex, roughness: 0.35, metalness: 0.1 });
+  const spanW = wallOff * 2 + 2.2;
+
+  for (const pFrac of [0.105, 0.735]) {
+    const ps = samples[Math.floor(N * pFrac) % N];
+    const pg = new THREE.Group();
+    pg.position.set(ps.pos.x, ps.asphaltY, ps.pos.z);
+    pg.rotation.y = Math.atan2(ps.tangent.x, ps.tangent.z);
+
+    for (const side of [-1, 1]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(2.1, 8.2, 1.8), pirelliYellowMat);
+      pillar.position.set(side * (wallOff + 0.6), 4.1, 0);
+      pillar.castShadow = true;
+      pg.add(pillar);
+    }
+    const topArch = new THREE.Mesh(new THREE.BoxGeometry(spanW + 1.6, 2.3, 1.85), pirelliBannerMat);
+    topArch.position.set(0, 7.6, 0);
+    topArch.castShadow = true;
+    pg.add(topArch);
+    group.add(pg);
+  }
+
+  // Weathered concrete pedestrian overpass bridge across the Main Straight (Photo: image_6.png)
+  const pedSample = samples[Math.floor(N * 0.068) % N];
+  const pedGroup = new THREE.Group();
+  pedGroup.position.set(pedSample.pos.x, pedSample.asphaltY, pedSample.pos.z);
+  pedGroup.rotation.y = Math.atan2(pedSample.tangent.x, pedSample.tangent.z);
+  for (const side of [-1, 1]) {
+    const pier = new THREE.Mesh(new THREE.BoxGeometry(2.4, 6.8, 2.6), weatheredConcreteMat);
+    pier.position.set(side * (wallOff + 1.2), 3.4, 0);
+    pier.castShadow = true;
+    pedGroup.add(pier);
+  }
+  const pedDeck = new THREE.Mesh(new THREE.BoxGeometry(spanW + 3.0, 1.4, 2.4), weatheredConcreteMat);
+  pedDeck.position.set(0, 6.4, 0);
+  pedDeck.castShadow = true;
+  pedGroup.add(pedDeck);
+  group.add(pedGroup);
+
+  // 3. Cylindrical / Octagonal Blue-Glass Race Control Tower on the Main Straight (Photos: image_6.png & Autodromo-Nazionale-Monza-800x500-1.jpg)
+  const rcSample = samples[Math.floor(N * 0.078) % N];
+  const rcTower = new THREE.Group();
+  rcTower.position.set(
+    rcSample.pos.x - rcSample.right.x * (wallOff + 2.8),
+    rcSample.asphaltY,
+    rcSample.pos.z - rcSample.right.z * (wallOff + 2.8)
+  );
+  const rcBase = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 5.2, 8), weatheredConcreteMat);
+  rcBase.position.y = 2.6;
+  rcTower.add(rcBase);
+  const rcGlass = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.4, 3.1, 7.6, 12),
+    new THREE.MeshPhysicalMaterial({ color: '#0c283d', metalness: 0.88, roughness: 0.12, clearcoat: 1.0 })
+  );
+  rcGlass.position.y = 8.8;
+  rcGlass.castShadow = true;
+  rcTower.add(rcGlass);
+  for (let fl = 0; fl < 4; fl++) {
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 0.28, 12), weatheredConcreteMat);
+    ring.position.y = 5.4 + fl * 2.3;
+    rcTower.add(ring);
+  }
+  group.add(rcTower);
+
+  // 4. Emerald-Turquoise Green Chicane Runoff Aprons + Escape Roads + Yellow/Black Sausage Curbs (Photos: image_3.png, image_4.png, 1657349836.avif)
+  const sausageMat = new THREE.MeshStandardMaterial({ color: '#ff9900', roughness: 0.45, metalness: 0.1 });
+  const chicaneSpecs = [
+    { startFrac: 0.115, endFrac: 0.175, side: -1, width: 11.5 }, // Variante del Rettifilo (Turn 1-2)
+    { startFrac: 0.305, endFrac: 0.365, side: 1, width: 10.5 },  // Variante della Roggia (Turn 4-5)
+    { startFrac: 0.610, endFrac: 0.685, side: -1, width: 13.5 }  // Variante Ascari triangular emerald apron!
+  ];
+  for (const ch of chicaneSpecs) {
+    const i0 = Math.floor(N * ch.startFrac);
+    const i1 = Math.floor(N * ch.endFrac);
+    const emeraldParts: THREE.BufferGeometry[] = [];
+    const escapeParts: THREE.BufferGeometry[] = [];
+    const sausageParts: THREE.BufferGeometry[] = [];
+
+    for (let i = i0; i < i1; i++) {
+      const s = samples[i % N];
+      const yaw = Math.atan2(s.tangent.x, s.tangent.z);
+      // Bright emerald-green painted runoff triangle/strip
+      const em = new THREE.PlaneGeometry(ch.width, 5.2);
+      em.rotateX(-Math.PI / 2);
+      em.rotateY(yaw);
+      em.translate(
+        s.pos.x + s.right.x * (ch.side * (halfW + ch.width * 0.48)),
+        s.asphaltY + 0.014,
+        s.pos.z + s.right.z * (ch.side * (halfW + ch.width * 0.48))
+      );
+      emeraldParts.push(normTrackGeo(em));
+
+      // Dark asphalt escape road behind the emerald apron
+      const esc = new THREE.PlaneGeometry(ch.width * 0.75, 5.2);
+      esc.rotateX(-Math.PI / 2);
+      esc.rotateY(yaw);
+      esc.translate(
+        s.pos.x + s.right.x * (-ch.side * (halfW + ch.width * 0.42)),
+        s.asphaltY + 0.012,
+        s.pos.z + s.right.z * (-ch.side * (halfW + ch.width * 0.42))
+      );
+      escapeParts.push(normTrackGeo(esc));
+
+      // 3D Raised Yellow/Orange Sausage Curbs (dissuasori) at the chicane apexes
+      if (i % 3 === 0) {
+        const saus = new THREE.CylinderGeometry(0.18, 0.24, 2.8, 8);
+        saus.rotateX(Math.PI / 2);
+        saus.rotateY(yaw);
+        saus.translate(
+          s.pos.x + s.right.x * (ch.side * (halfW + 0.85)),
+          s.asphaltY + 0.08,
+          s.pos.z + s.right.z * (ch.side * (halfW + 0.85))
+        );
+        sausageParts.push(normTrackGeo(saus));
       }
     }
-    group.add(sopGroup);
+
+    if (emeraldParts.length) {
+      group.add(new THREE.Mesh(mergeGeometries(emeraldParts, false)!, emeraldRunoffMat));
+      emeraldParts.forEach((g) => g.dispose());
+    }
+    if (escapeParts.length) {
+      group.add(new THREE.Mesh(mergeGeometries(escapeParts, false)!, escapeAsphaltMat));
+      escapeParts.forEach((g) => g.dispose());
+    }
+    if (sausageParts.length) {
+      group.add(new THREE.Mesh(mergeGeometries(sausageParts, false)!, sausageMat));
+      sausageParts.forEach((g) => g.dispose());
+    }
+  }
+
+  // 5. Crescent Beige Leca Gravel Traps + Green Astroturf Strips at Lesmo 1, Lesmo 2, Ascari & Parabolica (Photos: image_3.png, image_4.png, image_7.png, images.jpg)
+  const gravelZones = [
+    { startFrac: 0.125, endFrac: 0.165, side: -1, w: 8.5 }, // Turn 1 Rettifilo outer gravel
+    { startFrac: 0.395, endFrac: 0.445, side: -1, w: 9.5 }, // Lesmo 1 outer gravel trap
+    { startFrac: 0.465, endFrac: 0.515, side: -1, w: 9.5 }, // Lesmo 2 outer gravel trap
+    { startFrac: 0.615, endFrac: 0.675, side: 1, w: 10.5 }, // Variante Ascari outer gravel trap
+    { startFrac: 0.840, endFrac: 0.960, side: -1, w: 12.0 } // Curva Parabolica / Alboreto huge crescent gravel trap!
+  ];
+  const gravelParts: THREE.BufferGeometry[] = [];
+  const astroParts: THREE.BufferGeometry[] = [];
+  for (const gz of gravelZones) {
+    const i0 = Math.floor(N * gz.startFrac);
+    const i1 = Math.floor(N * gz.endFrac);
+    for (let i = i0; i < i1; i++) {
+      const s = samples[i % N];
+      const yaw = Math.atan2(s.tangent.x, s.tangent.z);
+      // Green Astroturf strip hugging the outer curb
+      const ast = new THREE.PlaneGeometry(1.45, 4.8);
+      ast.rotateX(-Math.PI / 2);
+      ast.rotateY(yaw);
+      ast.translate(
+        s.pos.x + s.right.x * (gz.side * (halfW + 1.35)),
+        s.asphaltY + 0.016,
+        s.pos.z + s.right.z * (gz.side * (halfW + 1.35))
+      );
+      astroParts.push(normTrackGeo(ast));
+
+      // Wide Beige Leca Gravel Trap outside the astroturf
+      const grv = new THREE.PlaneGeometry(gz.w, 4.8);
+      grv.rotateX(-Math.PI / 2);
+      grv.rotateY(yaw);
+      grv.translate(
+        s.pos.x + s.right.x * (gz.side * (halfW + 2.1 + gz.w * 0.5)),
+        s.asphaltY + 0.013,
+        s.pos.z + s.right.z * (gz.side * (halfW + 2.1 + gz.w * 0.5))
+      );
+      gravelParts.push(normTrackGeo(grv));
+    }
+  }
+  if (astroParts.length) {
+    group.add(new THREE.Mesh(mergeGeometries(astroParts, false)!, astroturfMat));
+    astroParts.forEach((g) => g.dispose());
+  }
+  if (gravelParts.length) {
+    group.add(new THREE.Mesh(mergeGeometries(gravelParts, false)!, lecaGravelMat));
+    gravelParts.forEach((g) => g.dispose());
+  }
+
+  // 6. Black #ItalianGP & P ZERO Barrier Boards + Turn 1 Giant Black/Yellow P ZERO Ground Banner (Photo: 1657349836.avif)
+  const italianGpMat = new THREE.MeshStandardMaterial({ map: createItalianGPBarrierTexture(), roughness: 0.4 });
+  for (const bZone of [
+    { start: 0.11, end: 0.18, side: -1 },
+    { start: 0.11, end: 0.17, side: 1 },
+    { start: 0.61, end: 0.68, side: -1 },
+    { start: 0.84, end: 0.94, side: -1 }
+  ]) {
+    const i0 = Math.floor(N * bZone.start);
+    const i1 = Math.floor(N * bZone.end);
+    for (let i = i0; i < i1; i += 4) {
+      const s = samples[i % N];
+      const board = new THREE.Mesh(new THREE.BoxGeometry(0.18, 1.15, 16.5), italianGpMat);
+      board.position.set(
+        s.pos.x + s.right.x * (bZone.side * (wallOff - 0.3)),
+        s.asphaltY + 0.65,
+        s.pos.z + s.right.z * (bZone.side * (wallOff - 0.3))
+      );
+      board.rotation.y = Math.atan2(s.tangent.x, s.tangent.z);
+      group.add(board);
+    }
+  }
+
+  // Giant P ZERO Ground Banner on the inside grass of Turn 1 Rettifilo (Photo: 1657349836.avif)
+  const t1Sample = samples[Math.floor(N * 0.122) % N];
+  const pZeroGround = new THREE.Mesh(
+    new THREE.PlaneGeometry(7.5, 22.0),
+    new THREE.MeshStandardMaterial({ map: createItalianGPBarrierTexture(), roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -3 })
+  );
+  pZeroGround.rotation.x = -Math.PI / 2;
+  pZeroGround.rotation.z = -Math.atan2(t1Sample.tangent.x, t1Sample.tangent.z) + 0.35;
+  pZeroGround.position.set(
+    t1Sample.pos.x + t1Sample.right.x * (halfW + 6.2),
+    t1Sample.asphaltY + 0.03,
+    t1Sample.pos.z + t1Sample.right.z * (halfW + 6.2)
+  );
+  group.add(pZeroGround);
+
+  // 7. Row of 4 Uncovered Stepped Metal "Jochen Rindt" Grandstands along the Back Straight before Parabolica (Photo: image_7.png)
+  const openBleacherMat = new THREE.MeshStandardMaterial({ color: '#9aa3b0', roughness: 0.65, metalness: 0.35 });
+  const scaffoldMat = new THREE.MeshStandardMaterial({ color: '#242a34', roughness: 0.5, metalness: 0.7 });
+  for (let b = 0; b < 4; b++) {
+    const bFrac = 0.755 + b * 0.022;
+    const bs = samples[Math.floor(N * bFrac) % N];
+    const bg = new THREE.Group();
+    const bDist = wallOff + 10.5;
+    bg.position.set(bs.pos.x - bs.right.x * bDist, bs.asphaltY, bs.pos.z - bs.right.z * bDist);
+    bg.lookAt(bs.pos.x, bs.asphaltY, bs.pos.z);
+
+    const base = new THREE.Mesh(new THREE.BoxGeometry(28, 3.8, 8.5), scaffoldMat);
+    base.position.set(0, 1.9, -1.0);
+    bg.add(base);
+    const tier = new THREE.Mesh(new THREE.BoxGeometry(27.6, 1.2, 9.2), openBleacherMat);
+    tier.position.set(0, 4.6, -1.0);
+    tier.rotation.x = 0.36;
+    tier.castShadow = true;
+    bg.add(tier);
+    group.add(bg);
+  }
+
+  // 8. FULL 1955 HISTORIC BANKED CONCRETE OVAL ("ANELLO ALTA VELOCITÀ / SOPRAELEVATA") (Photos: image_5.png, images_2.jpg, image_7.png)
+  // Part A: North Banked Curve Viaduct crossing right OVER the Serraglio straight before Ascari (Photo: image_5.png)
+  const serraglioSample = samples[Math.floor(N * 0.565) % N];
+  const sopGroup = new THREE.Group();
+  sopGroup.position.set(serraglioSample.pos.x, serraglioSample.asphaltY, serraglioSample.pos.z);
+  sopGroup.rotation.y = Math.atan2(serraglioSample.tangent.x, serraglioSample.tangent.z) + 0.38;
+
+  const bankedDeck = new THREE.Mesh(new THREE.BoxGeometry(210, 1.35, 14.8), weatheredConcreteMat);
+  bankedDeck.position.set(0, 8.6, 0);
+  bankedDeck.rotation.z = 0.32;
+  bankedDeck.castShadow = true;
+  bankedDeck.receiveShadow = true;
+  sopGroup.add(bankedDeck);
+
+  // Rusty vintage steel guardrails along top and bottom of the 1955 Sopraelevata deck
+  const railMat = new THREE.MeshStandardMaterial({ color: '#4d433e', roughness: 0.78, metalness: 0.45 });
+  for (const rz of [-7.1, 7.1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(210, 0.85, 0.25), railMat);
+    rail.position.set(0, 9.4, rz);
+    rail.rotation.z = 0.32;
+    sopGroup.add(rail);
+  }
+
+  for (const px of [-88, -70, -52, -35, -21, 21, 35, 52, 70, 88]) {
+    const pierH = 8.4 + Math.sin(0.32) * px * 0.45;
+    if (pierH > 2.2) {
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(1.45, pierH, 11.4), weatheredConcreteMat);
+      pier.position.set(px, pierH * 0.5, 0);
+      pier.castShadow = true;
+      sopGroup.add(pier);
+    }
+  }
+  group.add(sopGroup);
+
+  // Part B: South Banked Curve of the 1955 Sopraelevata running inside/parallel to Curva Parabolica & Back Straight (Photos: image_7.png, images_2.jpg, images_3.jpg)
+  const southOvalParts: THREE.BufferGeometry[] = [];
+  for (let i = Math.floor(N * 0.72); i < Math.floor(N * 0.98); i += 2) {
+    const s = samples[i % N];
+    const yaw = Math.atan2(s.tangent.x, s.tangent.z);
+    const isCurve = i > Math.floor(N * 0.83);
+    const bankTilt = isCurve ? 0.44 : 0.08;
+    const innerDist = isCurve ? wallOff + 14.0 : wallOff + 18.0;
+    const slab = new THREE.BoxGeometry(11.5, 0.9, 9.5);
+    slab.rotateZ(-bankTilt);
+    slab.rotateY(yaw);
+    slab.translate(
+      s.pos.x + s.right.x * innerDist,
+      s.asphaltY + (isCurve ? 2.6 : 0.6),
+      s.pos.z + s.right.z * innerDist
+    );
+    southOvalParts.push(normTrackGeo(slab));
+  }
+  if (southOvalParts.length) {
+    const southOvalMesh = new THREE.Mesh(mergeGeometries(southOvalParts, false)!, weatheredConcreteMat);
+    southOvalParts.forEach((g) => g.dispose());
+    southOvalMesh.castShadow = true;
+    southOvalMesh.receiveShadow = true;
+    group.add(southOvalMesh);
+  }
+
+  // 9. Yellow Manitou Telehandler Cranes, White/Red FIA Medical Ambulances & Paddock Motorhome Trucks (Photos: 1657349836.avif, image_7.png, images_3.jpg)
+  const craneYellowMat = new THREE.MeshStandardMaterial({ color: '#f59c00', roughness: 0.38, metalness: 0.25 });
+  const darkMetalMat = new THREE.MeshStandardMaterial({ color: '#1b1f26', roughness: 0.5, metalness: 0.6 });
+  const ambulanceWhiteMat = new THREE.MeshStandardMaterial({ color: '#f4f7fb', roughness: 0.3, metalness: 0.1 });
+  const ambulanceRedMat = new THREE.MeshStandardMaterial({ color: '#e1121a', roughness: 0.35, metalness: 0.1 });
+
+  // Place Manitou Telehandler Recovery Cranes & Ambulances behind Turn 1 Rettifilo, Roggia & Ascari barriers!
+  for (const cFrac of [0.132, 0.152, 0.335, 0.642, 0.885]) {
+    const cs = samples[Math.floor(N * cFrac) % N];
+    const cg = new THREE.Group();
+    const side = cFrac < 0.2 ? -1 : 1;
+    cg.position.set(
+      cs.pos.x + cs.right.x * (side * (wallOff + 4.5)),
+      cs.asphaltY,
+      cs.pos.z + cs.right.z * (side * (wallOff + 4.5))
+    );
+    cg.rotation.y = Math.atan2(cs.tangent.x, cs.tangent.z) + 0.4;
+
+    // Telehandler Tractor Chassis + Raised Telescopic Boom Arm
+    const tractorBody = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.65, 4.4), craneYellowMat);
+    tractorBody.position.set(0, 1.1, 0);
+    tractorBody.castShadow = true;
+    cg.add(tractorBody);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.35, 1.8), darkMetalMat);
+    cab.position.set(-0.45, 2.1, 0.2);
+    cg.add(cab);
+    const boom = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 7.2), craneYellowMat);
+    boom.position.set(0.35, 3.2, 1.6);
+    boom.rotation.x = 0.48;
+    boom.castShadow = true;
+    cg.add(boom);
+
+    // FIA White/Red Medical Ambulance Van parked alongside the crane (Photo: 1657349836.avif)
+    const amb = new THREE.Mesh(new THREE.BoxGeometry(2.25, 2.55, 5.6), ambulanceWhiteMat);
+    amb.position.set(0, 1.35, -7.2);
+    amb.castShadow = true;
+    cg.add(amb);
+    const ambStripe = new THREE.Mesh(new THREE.BoxGeometry(2.30, 0.45, 5.64), ambulanceRedMat);
+    ambStripe.position.set(0, 1.35, -7.2);
+    cg.add(ambStripe);
+
+    group.add(cg);
+  }
+
+  // White Team Hospitality Trucks & Motorhomes in the Main Paddock & Parabolica Inner Karting Lot (Photos: image_7.png, images_3.jpg)
+  const truckParts: THREE.BufferGeometry[] = [];
+  const mainPaddockS = samples[Math.floor(N * 0.04) % N];
+  const padYaw = Math.atan2(mainPaddockS.tangent.x, mainPaddockS.tangent.z);
+  for (let row = 0; row < 2; row++) {
+    for (let t = -5; t <= 5; t++) {
+      const tr = new THREE.BoxGeometry(2.65, 3.85, 13.5);
+      tr.rotateY(padYaw);
+      const alongOff = t * 16.5;
+      const latOff = wallOff + 28.0 + row * 11.0;
+      tr.translate(
+        mainPaddockS.pos.x + mainPaddockS.right.x * latOff + mainPaddockS.tangent.x * alongOff,
+        mainPaddockS.asphaltY + 1.95,
+        mainPaddockS.pos.z + mainPaddockS.right.z * latOff + mainPaddockS.tangent.z * alongOff
+      );
+      truckParts.push(normTrackGeo(tr));
+    }
+  }
+  if (truckParts.length) {
+    const trucksMesh = new THREE.Mesh(mergeGeometries(truckParts, false)!, ambulanceWhiteMat);
+    truckParts.forEach((g) => g.dispose());
+    trucksMesh.castShadow = true;
+    group.add(trucksMesh);
   }
 }
 
