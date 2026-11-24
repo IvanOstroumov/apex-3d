@@ -1044,10 +1044,10 @@ export function buildTrack(
   group.add(safetyCarGroup);
 
   if (trackCfg.theme === 'monza') {
-    addTreesInstancedAAA(group, samples, N, wallOff, halfW + curbWidth, 'deciduous', Math.round(860 * qCfg.treeMult));
+    addTreesInstancedAAA(group, samples, N, wallOff, halfW + curbWidth, 'deciduous', Math.round(1280 * qCfg.treeMult));
     addAlpineMountainRange(group, false);
   } else if (trackCfg.theme === 'alpine') {
-    addTreesInstancedAAA(group, samples, N, wallOff, halfW + curbWidth, 'pine', Math.round(860 * qCfg.treeMult));
+    addTreesInstancedAAA(group, samples, N, wallOff, halfW + curbWidth, 'pine', Math.round(1220 * qCfg.treeMult));
     addAlpineMountainRange(group, true);
   } else if (trackCfg.theme === 'desert') {
     addDesertTowersAndFloodlights(group, samples, N, wallOff);
@@ -2310,16 +2310,21 @@ function addGrandstandsAndPitBuilding(
     roughness: 0.42
   });
   const roofTrimMat = new THREE.MeshStandardMaterial({
-    color: '#1b222c',
-    metalness: 0.75,
-    roughness: 0.28
+    color: trackCfg.theme === 'monza' ? '#c81018' : '#1b222c',
+    metalness: 0.65,
+    roughness: 0.30
   });
 
+  // 8 Full-Scale Grandstands at iconic spectator zones (Tribuna Centrale, Prima Variante, Roggia, Lesmo, Ascari, Parabolica)
   const spots = [
-    { idx: 20, side: -1, len: 74 },
-    { idx: Math.floor(N * 0.22), side: 1, len: 56 },
-    { idx: Math.floor(N * 0.54), side: -1, len: 52 },
-    { idx: Math.floor(N * 0.88), side: -1, len: 58 }
+    { idx: 18, side: -1, len: 82 },
+    { idx: Math.floor(N * 0.09), side: -1, len: 64 },
+    { idx: Math.floor(N * 0.16), side: 1, len: 58 },
+    { idx: Math.floor(N * 0.34), side: -1, len: 54 },
+    { idx: Math.floor(N * 0.46), side: 1, len: 52 },
+    { idx: Math.floor(N * 0.64), side: -1, len: 62 },
+    { idx: Math.floor(N * 0.78), side: 1, len: 56 },
+    { idx: Math.floor(N * 0.90), side: -1, len: 68 }
   ];
 
   for (const sp of spots) {
@@ -2558,6 +2563,106 @@ function addGrandstandsAndPitBuilding(
     pitGroup.add(pitMonitors);
 
     group.add(pitGroup);
+  }
+
+  // 3. 4 Overhead F1 Championship Sponsor & Timing Truss Gantry Bridges across the circuit
+  const bridgeFracs = [0.11, 0.31, 0.62, 0.83];
+  const bannerMat = new THREE.MeshStandardMaterial({
+    color: trackCfg.theme === 'monza' ? '#c81018' : '#0d1522',
+    emissive: trackCfg.theme === 'city' ? '#004866' : '#2a0406',
+    emissiveIntensity: 0.45,
+    roughness: 0.32,
+    metalness: 0.25
+  });
+  const spanW = wallOff * 2 + 2.5;
+  for (const frac of bridgeFracs) {
+    const bs = samples[Math.floor(N * frac) % N];
+    if (bs.isTunnel) continue;
+    const bg = new THREE.Group();
+    bg.position.set(bs.pos.x, bs.asphaltY, bs.pos.z);
+    const yaw = Math.atan2(bs.tangent.x, bs.tangent.z);
+    bg.rotation.y = yaw;
+
+    for (const side of [-1, 1]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.95, 7.6, 1.4), trussMat);
+      leg.position.set(side * (wallOff + 0.8), 3.8, 0);
+      leg.castShadow = true;
+      bg.add(leg);
+    }
+    const crossBeam = new THREE.Mesh(new THREE.BoxGeometry(spanW, 1.45, 1.35), bannerMat);
+    crossBeam.position.set(0, 7.1, 0);
+    crossBeam.castShadow = true;
+    bg.add(crossBeam);
+
+    const accentStripe = new THREE.Mesh(
+      new THREE.BoxGeometry(spanW + 0.1, 0.22, 1.42),
+      new THREE.MeshStandardMaterial({
+        color: trackCfg.theme === 'monza' ? '#189e48' : '#00e5ff',
+        emissive: trackCfg.theme === 'monza' ? '#0a451e' : '#0088aa',
+        emissiveIntensity: 0.6
+      })
+    );
+    accentStripe.position.set(0, 6.45, 0);
+    bg.add(accentStripe);
+    group.add(bg);
+  }
+
+  // 4. Giant Trackside LED Broadcast Jumbotron Towers opposite the main spectator zones
+  const jumboMat = new THREE.MeshStandardMaterial({
+    color: '#0c1c2c',
+    emissive: '#144266',
+    emissiveIntensity: 0.85,
+    roughness: 0.18
+  });
+  for (const jFrac of [0.04, 0.17, 0.65, 0.91]) {
+    const js = samples[Math.floor(N * jFrac) % N];
+    if (js.isTunnel) continue;
+    const jg = new THREE.Group();
+    const jDist = wallOff + 7.5;
+    jg.position.set(js.pos.x + js.right.x * jDist, js.asphaltY, js.pos.z + js.right.z * jDist);
+    jg.lookAt(js.pos.x, js.asphaltY + 2.5, js.pos.z);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.42, 7.5, 10), trussMat);
+    mast.position.set(0, 3.75, 0);
+    jg.add(mast);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(8.6, 4.8, 0.55), darkCladdingMat);
+    frame.position.set(0, 7.6, 0);
+    jg.add(frame);
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(8.0, 4.3, 0.62), jumboMat);
+    screen.position.set(0, 7.6, 0.04);
+    jg.add(screen);
+    group.add(jg);
+  }
+
+  // 5. Authentic 1955 Monza "Sopraelevata" High-Speed Banked Concrete Oval Overpass Bridge over the Serraglio straight!
+  if (trackCfg.theme === 'monza') {
+    const serraglioSample = samples[Math.floor(N * 0.56) % N];
+    const sopGroup = new THREE.Group();
+    sopGroup.position.set(serraglioSample.pos.x, serraglioSample.asphaltY, serraglioSample.pos.z);
+    sopGroup.rotation.y = Math.atan2(serraglioSample.tangent.x, serraglioSample.tangent.z) + 0.32;
+
+    const weatheredConcreteMat = new THREE.MeshStandardMaterial({
+      color: '#6e737b',
+      roughness: 0.88,
+      metalness: 0.08
+    });
+    const bankedDeck = new THREE.Mesh(new THREE.BoxGeometry(118, 1.35, 14.5), weatheredConcreteMat);
+    bankedDeck.position.set(0, 8.6, 0);
+    bankedDeck.rotation.z = 0.34; // Authentic 20+ degree high-banking tilt of the historic 1955 Sopraelevata!
+    bankedDeck.castShadow = true;
+    bankedDeck.receiveShadow = true;
+    sopGroup.add(bankedDeck);
+
+    // Vintage concrete support A-frame piers flanking the track
+    for (const px of [-46, -32, -21, 21, 32, 46]) {
+      const pierH = 8.4 + Math.sin(0.34) * px;
+      if (pierH > 2.5) {
+        const pier = new THREE.Mesh(new THREE.BoxGeometry(1.4, pierH, 11.2), weatheredConcreteMat);
+        pier.position.set(px, pierH * 0.5, 0);
+        pier.castShadow = true;
+        sopGroup.add(pier);
+      }
+    }
+    group.add(sopGroup);
   }
 }
 

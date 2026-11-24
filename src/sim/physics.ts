@@ -538,10 +538,12 @@ export function stepCarPhysics(
   car.brakeTemp += (brakeHeatTarget - car.brakeTemp) * Math.min(1, dt * brakeRate);
   const brakeEff = (car.brakeTemp < 310 ? 0.90 : car.brakeTemp > 920 ? 0.88 : 1.0) * effBrakePress;
 
-  // 7. POWERTRAIN, CLUTCH BITE-POINT LAUNCH CONTROL, SEAMLESS SHIFT CUT, VSC LIMITER & CARBON BRAKES
+  // 7. POWERTRAIN, CLUTCH BITE-POINT LAUNCH CONTROL, SEAMLESS SHIFT CUT, VSC LIMITER, GEAR REV-LIMITER & CARBON BRAKES
   let fxEngine = 0;
   let rearSpinExcess = 0;
   const vscMaxSpeed = vscActive ? 54 : 115;
+  const activeGear = Math.max(1, Math.min(8, car.gear));
+  const gearMaxSpeed = car.gear === -1 ? 18 : GEAR_MAX_SPEEDS[activeGear];
 
   if (car.throttleInput > 0.01 && vFwd >= -0.5 && car.shiftCutTimer <= 0 && vFwd < vscMaxSpeed) {
     const ersKW = car.ersActive ? p.ersPowerKW * effPowerMult : 0;
@@ -556,9 +558,18 @@ export function stepCarPhysics(
       }
     }
     const offTrackTorqueMult = car.offTrack ? (0.82 - 0.18 * offTrackSeverity) : 1.0;
+    // Physical 15,000 RPM Gear Ratio Rev-Limiter: in 1st gear (~95 km/h), torque cuts off at the redline!
+    const revLimiterMult = car.gear > 0
+      ? THREE.MathUtils.clamp((gearMaxSpeed * 1.02 - vFwd) / (gearMaxSpeed * 0.06), 0, 1)
+      : 1.0;
     const gearTorqueCap = (car.gear <= 1 ? 13200 : car.gear === 2 ? 13900 : 14300) * launchBiteMult * offTrackTorqueMult;
     const rawDriveForce = Math.min(gearTorqueCap, totalPowerWatts / Math.max(14.0, vFwd));
-    fxEngine = car.throttleInput * rawDriveForce;
+    fxEngine = car.throttleInput * rawDriveForce * revLimiterMult;
+  }
+
+  // Mechanical engine over-rev compression braking if player downshifts into a lower gear above its max speed
+  if (car.gear > 0 && vFwd > gearMaxSpeed * 1.03) {
+    fxEngine -= Math.min(18500, (vFwd - gearMaxSpeed * 1.03) * 1650);
   }
 
   let fxBrakeFront = 0;
@@ -582,7 +593,7 @@ export function stepCarPhysics(
   const fwdDotTangent = fwdX * tInfo.tangentX + fwdZ * tInfo.tangentZ;
   const fSlope = -mass * GAME_CONSTANTS.GRAVITY * tInfo.tangentY * fwdDotTangent;
 
-  // 8. PACEJKA SLIP-ANGLE CORNERING, STEERING LINEARITY/DEADZONE & DIFFERENTIAL LOCK
+  // 8. PACEJKA SLIP-ANGLE CORNERING, HIGH-SPEED DOWNFORCE PLANTEDNESS & INSTANT COUNTER-STEER AUTHORITY
   let shapedSteer = car.steerInput;
   if (car.isPlayer) {
     const dz = (settings.steerDeadzone ?? 3) / 100;
@@ -596,21 +607,28 @@ export function stepCarPhysics(
       shapedSteer = Math.sign(shapedSteer) * THREE.MathUtils.clamp(Math.pow(normS, gamma) * sens, 0, 1.15);
     }
   }
-  const maxSteerRad = THREE.MathUtils.lerp(0.34, 0.068, THREE.MathUtils.clamp(absV / 85, 0, 1));
+  const maxSteerRad = THREE.MathUtils.lerp(0.30, 0.092, THREE.MathUtils.clamp(absV / 90, 0, 1));
   const steerAngle = shapedSteer * maxSteerRad;
 
   let fyFront = 0;
   let fyRear = 0;
 
   if (absV > 1.2 || Math.abs(vLat) > 1.2) {
-    const vSafe = Math.max(6.0, Math.hypot(vFwd, vLat * 0.65));
+    const vSafe = Math.max(8.0, Math.hypot(vFwd, vLat));
     const dirSign = vFwd >= -0.5 ? 1 : -1;
     const vLeft = -vLat;
-    const alphaF = Math.atan2(vLeft + car.yawRate * WHEELBASE_F, vSafe) - steerAngle * dirSign;
+
+    // Wider 405mm F1 rear Pirelli slicks + high-speed ground-effect diffuser stability
+    const rearStabilityMult = 1.18 + 0.10 * speedRatio;
+    // Counter-steer authority: when steering opposite to an active slide or direction change, front tires bite immediately!
+    const bodySlip = Math.atan2(vLeft, vSafe);
+    const isCounterSteering = shapedSteer * vLat > 0 || shapedSteer * car.yawRate < -0.05;
+    const effectiveSlipF = isCounterSteering ? bodySlip * 0.22 : bodySlip * 0.62;
+    const alphaF = effectiveSlipF + Math.atan2(car.yawRate * WHEELBASE_F, vSafe) - steerAngle * dirSign;
     const alphaR = Math.atan2(vLeft - car.yawRate * WHEELBASE_R, vSafe);
 
     const maxGripF = mu * fzFront;
-    const maxGripR = mu * fzRear;
+    const maxGripR = mu * rearStabilityMult * fzRear;
 
     const useAbs = !car.isPlayer || settings.abs;
     if (fxBrakeFront > maxGripF * 0.93) {
@@ -622,7 +640,7 @@ export function stepCarPhysics(
         fxBrakeFront = maxGripF * 0.93;
       }
     }
-    const availLatF = Math.sqrt(Math.max(0.24, 1 - Math.pow(fxBrakeFront / (maxGripF + 1), 2)));
+    const availLatF = Math.sqrt(Math.max(0.32, 1 - Math.pow(fxBrakeFront / (maxGripF + 1), 2)));
     const fyLeftFront = pacejkaLateral(alphaF, mu * availLatF, fzFront);
 
     const fxRearCmd = fxEngine - fxBrakeRear;
@@ -639,10 +657,10 @@ export function stepCarPhysics(
         effFxRear = Math.sign(fxRearCmd) * maxGripR * (car.offTrack ? 0.78 : 0.91);
       }
     }
-    // Keep minimum rear lateral authority >= 0.62 when off-track so dipping a wheel on grass doesn't snap-spin
-    const minLatR = car.offTrack ? 0.62 : 0.34;
-    const availLatR = Math.sqrt(Math.max(minLatR * minLatR, 1 - Math.pow(effFxRear / (maxGripR + 1), 2)));
-    const fyLeftRear = pacejkaLateral(alphaR, mu * availLatR, fzRear);
+    // High-speed F1 downforce & wider rear slicks keep rear lateral authority >= 0.80..0.90 under throttle!
+    const minLatR = car.offTrack ? 0.72 : (tcLevel === 'full' ? 0.92 : tcLevel === 'med' ? 0.88 : 0.78);
+    const availLatR = Math.max(minLatR, Math.sqrt(Math.max(0.5, 1 - Math.pow(effFxRear / (maxGripR * 1.25 + 1), 2))));
+    const fyLeftRear = pacejkaLateral(alphaR, mu * rearStabilityMult * availLatR, fzRear);
 
     if (vFwd >= 0) {
       if (fxEngine > 0) fxEngine = Math.max(0, effFxRear);
@@ -653,17 +671,17 @@ export function stepCarPhysics(
     fyFront = -fyLeftFront + fCamber * 0.5;
     fyRear = -fyLeftRear + fCamber * 0.5;
 
-    // On-Throttle & Off-Throttle Differential Locking + Self-Aligning Pneumatic Trail Damping
+    // On-Throttle & Off-Throttle Differential Locking + Strong Self-Aligning Aero/Pneumatic Trail Stability
     const diffLock = car.isPlayer
       ? (car.throttleInput > 0.25 ? (settings.customDiffOnThrottle ?? 72) : (settings.customDiffOffThrottle ?? 60)) / 70
       : 1.0;
     const yawTorque = fyLeftFront * WHEELBASE_F - fyLeftRear * WHEELBASE_R;
-    // Pneumatic trail & vertical fin weathervane alignment torque resists unrecoverable spins
-    const selfAlignTorque = -vLat * (car.offTrack ? 165 : 115);
-    const yawDamp = -car.yawRate * (620 + absV * 34 + (car.offTrack ? 340 : 0)) * diffLock;
+    const selfAlignTorque = -vLat * (car.offTrack ? 420 : 480 + speedRatio * 220);
+    const counterSteerDamp = isCounterSteering ? 1.45 : 1.0;
+    const yawDamp = -car.yawRate * (1120 + absV * 50 + (car.offTrack ? 420 : 0)) * diffLock * counterSteerDamp;
     const yawAccel = (yawTorque + selfAlignTorque + yawDamp) / YAW_INERTIA;
 
-    const maxYawRate = car.offTrack ? 1.85 : 2.35;
+    const maxYawRate = car.offTrack ? 1.65 : 2.15;
     car.yawRate = THREE.MathUtils.clamp(car.yawRate + yawAccel * dt, -maxYawRate, maxYawRate);
     const dYaw = car.yawRate * dt;
     car.yaw += dYaw;
@@ -678,12 +696,12 @@ export function stepCarPhysics(
 
     const aLat = (fyFront + fyRear) / mass;
     vLat += aLat * dt;
-    // Physical lateral tire scrub & off-track grass/gravel lateral plowing decay
-    const latScrubDamp = (car.offTrack ? 3.6 + offTrackSeverity * 2.2 : 1.75) + (absV < 14 ? 3.5 : 0);
+    // Lateral grip increases with speed (aerodynamic downforce plants the car on rails at high speed!)
+    const latScrubDamp = (car.offTrack ? 4.2 + offTrackSeverity * 2.2 : 3.6 + speedRatio * 1.8) + (absV < 14 ? 4.0 : 0);
     vLat *= Math.exp(-latScrubDamp * dt);
 
     car.latAccel = aLat;
-    car.slipRatio = THREE.MathUtils.clamp(Math.max(Math.abs(alphaR) * 3.2, rearSpinExcess, frontLockupAmt), 0, 1);
+    car.slipRatio = THREE.MathUtils.clamp(Math.max(Math.abs(alphaR) * 2.8, rearSpinExcess, frontLockupAmt), 0, 1);
     car.frontLockup = frontLockupAmt;
   } else {
     vLat *= Math.exp(-14 * dt);
@@ -704,7 +722,7 @@ export function stepCarPhysics(
     vFwd -= (vFwd - maxAllowedFwd) * Math.min(1, dt * 3.8);
   }
   vFwd = THREE.MathUtils.clamp(vFwd, -18, 108);
-  vLat = THREE.MathUtils.clamp(vLat, -26, 26);
+  vLat = THREE.MathUtils.clamp(vLat, -18, 18);
 
   const newSin = Math.sin(car.yaw);
   const newCos = Math.cos(car.yaw);
@@ -904,48 +922,12 @@ export interface CarCollisionEvent {
   primaryColor: string;
 }
 
-/**
- * Closest points between two 2D line segments (car chassis spines):
- * P(s) = A0 + s * u, Q(t) = B0 + t * v, with s, t in [-L, +L].
- */
-function closestSpinePoints2D(
-  ax: number, az: number, ux: number, uz: number,
-  bx: number, bz: number, vx: number, vz: number,
-  halfLen: number
-): [number, number] {
-  const wx = ax - bx;
-  const wz = az - bz;
-  const b = ux * vx + uz * vz;
-  const d = ux * wx + uz * wz;
-  const e = vx * wx + vz * wz;
-  const denom = 1 - b * b;
-
-  let s: number;
-  let t: number;
-  if (denom < 1e-5) {
-    s = 0;
-    t = THREE.MathUtils.clamp(e, -halfLen, halfLen);
-  } else {
-    s = THREE.MathUtils.clamp((b * e - d) / denom, -halfLen, halfLen);
-    t = b * s + e;
-    if (t > halfLen) {
-      t = halfLen;
-      s = THREE.MathUtils.clamp(b * t - d, -halfLen, halfLen);
-    } else if (t < -halfLen) {
-      t = -halfLen;
-      s = THREE.MathUtils.clamp(b * t - d, -halfLen, halfLen);
-    }
-  }
-  return [s, t];
-}
-
 export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCollisionEvent[] {
   const events: CarCollisionEvent[] = [];
-  // True F1 car footprint: spine half-length 1.38m + capsule radius 0.99m => 4.74m length x 1.98m width
-  const SPINE_HALF_LEN = 1.38;
-  const CHASSIS_RADIUS = 0.99;
-  const MIN_CAPSULE_DIST = CHASSIS_RADIUS * 2;
-  const MAX_CENTER_DIST_SQ = (SPINE_HALF_LEN * 2 + MIN_CAPSULE_DIST + 0.5) ** 2;
+  // Oriented Elliptical F1 Hull: 4.50m length (halfLen 2.25m) x 1.96m width (halfWid 0.98m)
+  const HALF_LEN = 2.25;
+  const HALF_WID = 0.98;
+  const MAX_CENTER_DIST_SQ = (HALF_LEN * 2 + 0.4) ** 2;
 
   for (let i = 0; i < cars.length; i++) {
     for (let j = i + 1; j < cars.length; j++) {
@@ -958,77 +940,90 @@ export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCo
       const centerDistSq = cdx * cdx + cdz * cdz;
       if (centerDistSq > MAX_CENTER_DIST_SQ || centerDistSq < 0.0001) continue;
 
-      const aFwdX = Math.sin(a.yaw);
-      const aFwdZ = Math.cos(a.yaw);
-      const bFwdX = Math.sin(b.yaw);
-      const bFwdZ = Math.cos(b.yaw);
+      // Average heading frame between the two cars for symmetric, non-snapping elliptical hull normal
+      const aFwdX = Math.sin(a.yaw), aFwdZ = Math.cos(a.yaw);
+      const bFwdX = Math.sin(b.yaw), bFwdZ = Math.cos(b.yaw);
+      const aRightX = -aFwdZ, aRightZ = aFwdX;
+      const bRightX = -bFwdZ, bRightZ = bFwdX;
 
-      const [sA, sB] = closestSpinePoints2D(
-        a.pos.x, a.pos.z, aFwdX, aFwdZ,
-        b.pos.x, b.pos.z, bFwdX, bFwdZ,
-        SPINE_HALF_LEN
-      );
+      let mFwdX = aFwdX + bFwdX;
+      let mFwdZ = aFwdZ + bFwdZ;
+      const mLen = Math.hypot(mFwdX, mFwdZ);
+      if (mLen > 0.01) {
+        mFwdX /= mLen;
+        mFwdZ /= mLen;
+      } else {
+        mFwdX = aFwdX;
+        mFwdZ = aFwdZ;
+      }
+      const mRightX = -mFwdZ;
+      const mRightZ = mFwdX;
 
-      const pax = a.pos.x + aFwdX * sA;
-      const paz = a.pos.z + aFwdZ * sA;
-      const pbx = b.pos.x + bFwdX * sB;
-      const pbz = b.pos.z + bFwdZ * sB;
+      // Project center delta into oriented frame
+      const along = cdx * mFwdX + cdz * mFwdZ;
+      const lat = cdx * mRightX + cdz * mRightZ;
 
-      const dx = pbx - pax;
-      const dz = pbz - paz;
-      const distSq = dx * dx + dz * dz;
-      if (distSq >= MIN_CAPSULE_DIST * MIN_CAPSULE_DIST) continue;
+      const normAlong = along / (HALF_LEN * 2);
+      const normLat = lat / (HALF_WID * 2);
+      const ellipDistSq = normAlong * normAlong + normLat * normLat;
+      if (ellipDistSq >= 1.0) continue;
 
-      const dist = Math.max(0.05, Math.sqrt(distSq));
-      const nx = dx / dist;
-      const nz = dz / dist;
-      const overlap = MIN_CAPSULE_DIST - dist;
+      const ellipDist = Math.max(0.05, Math.sqrt(ellipDistSq));
+      // Smooth continuous surface normal in world space
+      const gradAlong = normAlong / (HALF_LEN * 2);
+      const gradLat = normLat / (HALF_WID * 2);
+      const gx = mFwdX * gradAlong + mRightX * gradLat;
+      const gz = mFwdZ * gradAlong + mRightZ * gradLat;
+      const gLen = Math.max(0.001, Math.hypot(gx, gz));
+      const nx = gx / gLen;
+      const nz = gz / gLen;
 
-      // Classify contact geometry: rear-end (nose to diffuser) vs wheel-to-wheel rub vs angular side slam
+      // Physical overlap distance in meters along the contact normal
+      const effRadius = 1.0 / gLen;
+      const overlap = (1.0 - ellipDist) * effRadius;
+
+      // Classify contact: rear-end (nose to diffuser) vs wheel-to-wheel side rub
       const aDotN = aFwdX * nx + aFwdZ * nz;
       const bDotN = bFwdX * nx + bFwdZ * nz;
-      const headingsAlign = aFwdX * bFwdX + aFwdZ * bFwdZ;
-      const isRearEnd = Math.abs(aDotN) > 0.68 && Math.abs(bDotN) > 0.68 && headingsAlign > 0.5;
-      const isWheelRub = !isRearEnd && Math.abs(aDotN) < 0.48 && Math.abs(bDotN) < 0.48 && headingsAlign > 0.65;
+      const isRearEnd = Math.abs(normAlong) > Math.abs(normLat) * 1.15;
+      const isWheelRub = !isRearEnd && Math.abs(aDotN) < 0.55 && Math.abs(bDotN) < 0.55;
       const colType: CarCollisionEvent['type'] = isRearEnd ? 'rear_end' : isWheelRub ? 'wheel_rub' : 'side_slam';
 
-      // Asymmetric positional separation: give player slightly firmer footing in wheel-to-wheel duels
-      const shareA = a.isPlayer ? 0.42 : b.isPlayer ? 0.58 : 0.50;
+      // Player car has heavy planted dominance (0.24 vs 0.76) so AI rivals get pushed away smoothly without shoving player off-track
+      const shareA = a.isPlayer ? 0.24 : b.isPlayer ? 0.76 : 0.50;
       const shareB = 1 - shareA;
-      const sep = overlap * 1.04;
+      const sep = overlap * 0.65;
       a.pos.x -= nx * sep * shareA;
       a.pos.z -= nz * sep * shareA;
       b.pos.x += nx * sep * shareB;
       b.pos.z += nz * sep * shareB;
 
-      // Contact-point velocity includes each car's yaw angular velocity lever arm
-      const contactX = (pax + pbx) * 0.5;
-      const contactZ = (paz + pbz) * 0.5;
-      const rax = contactX - a.pos.x;
-      const raz = contactZ - a.pos.z;
-      const rbx = contactX - b.pos.x;
-      const rbz = contactZ - b.pos.z;
+      // Make AI rivals immediately yield lateral lane offset away from the contact!
+      if (!a.isPlayer) {
+        const pushLatA = -(nx * a._tInfo.rightX + nz * a._tInfo.rightZ);
+        a.aiLaneOffset = THREE.MathUtils.clamp(a.aiLaneOffset + pushLatA * overlap * 0.9, -6.5, 6.5);
+        a.aiTargetLane = a.aiLaneOffset;
+      }
+      if (!b.isPlayer) {
+        const pushLatB = nx * b._tInfo.rightX + nz * b._tInfo.rightZ;
+        b.aiLaneOffset = THREE.MathUtils.clamp(b.aiLaneOffset + pushLatB * overlap * 0.9, -6.5, 6.5);
+        b.aiTargetLane = b.aiLaneOffset;
+      }
 
-      const vax = a.vel.x + a.yawRate * raz;
-      const vaz = a.vel.z - a.yawRate * rax;
-      const vbx = b.vel.x + b.yawRate * rbz;
-      const vbz = b.vel.z - b.yawRate * rbx;
-
-      const rvx = vbx - vax;
-      const rvz = vbz - vaz;
+      const rvx = b.vel.x - a.vel.x;
+      const rvz = b.vel.z - a.vel.z;
       const relNorm = rvx * nx + rvz * nz;
 
-      if (relNorm < 0.4) {
-        const effRelNorm = Math.min(-1.2, relNorm);
-        const restitution = isWheelRub ? 0.16 : isRearEnd ? 0.28 : 0.34;
-        const jImp = -(1 + restitution) * effRelNorm;
+      // Only apply velocity impulse if cars are actually moving toward each other (no 240Hz artificial bounce!)
+      if (relNorm < -0.05) {
+        const restitution = isWheelRub ? 0.12 : isRearEnd ? 0.22 : 0.25;
+        const jImp = -(1 + restitution) * relNorm;
 
-        // Tangential tire/sidepod friction impulse
+        // Light tangential scrub
         const tx = -nz;
         const tz = nx;
         const relTan = rvx * tx + rvz * tz;
-        const frictionMu = isWheelRub ? 0.12 : 0.22;
-        const jTan = THREE.MathUtils.clamp(-relTan * 0.35, -jImp * frictionMu, jImp * frictionMu);
+        const jTan = THREE.MathUtils.clamp(-relTan * 0.15, -jImp * 0.12, jImp * 0.12);
 
         const ix = nx * jImp + tx * jTan;
         const iz = nz * jImp + tz * jTan;
@@ -1038,51 +1033,35 @@ export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCo
         b.vel.x += ix * shareB;
         b.vel.z += iz * shareB;
 
-        // Physical lever-arm rotational yaw impulse (2D cross product r x J), bounded for smooth playability
-        const torqueScale = isWheelRub ? 0.12 : isRearEnd ? 0.18 : 0.38;
-        const crossA = rax * iz - raz * ix;
-        const crossB = rbx * iz - rbz * ix;
-        const maxYawKick = a.isPlayer || b.isPlayer ? 0.55 : 0.85;
-        a.yawRate = THREE.MathUtils.clamp(
-          a.yawRate - THREE.MathUtils.clamp(crossA * torqueScale * (a.isPlayer ? 0.45 : 0.75), -maxYawKick, maxYawKick),
-          -2.1,
-          2.1
-        );
-        b.yawRate = THREE.MathUtils.clamp(
-          b.yawRate + THREE.MathUtils.clamp(crossB * torqueScale * (b.isPlayer ? 0.45 : 0.75), -maxYawKick, maxYawKick),
-          -2.1,
-          2.1
-        );
+        // Stabilize yaw rate on contact so collisions NEVER cause uncontrollable spin-outs
+        a.yawRate *= a.isPlayer ? 0.78 : 0.85;
+        b.yawRate *= b.isPlayer ? 0.78 : 0.85;
 
-        // Immediately sync forward & lateral speeds with post-collision velocity vector
-        const aRightX = -aFwdZ, aRightZ = aFwdX;
-        const bRightX = -bFwdZ, bRightZ = bFwdX;
+        // Sync forward & lateral speeds with post-collision velocity vector
         a.speed = a.vel.x * aFwdX + a.vel.z * aFwdZ;
-        a.lateralSpeed = THREE.MathUtils.clamp(a.vel.x * aRightX + a.vel.z * aRightZ, -18, 18);
+        a.lateralSpeed = THREE.MathUtils.clamp(a.vel.x * aRightX + a.vel.z * aRightZ, -12, 12);
         b.speed = b.vel.x * bFwdX + b.vel.z * bFwdZ;
-        b.lateralSpeed = THREE.MathUtils.clamp(b.vel.x * bRightX + b.vel.z * bRightZ, -18, 18);
+        b.lateralSpeed = THREE.MathUtils.clamp(b.vel.x * bRightX + b.vel.z * bRightZ, -12, 12);
 
-        const relSpeed = Math.hypot(rvx, rvz);
-        const intensity = THREE.MathUtils.clamp(Math.max(Math.abs(relNorm) / 18, relSpeed / 26), 0.08, 1.0);
+        const intensity = THREE.MathUtils.clamp(Math.abs(relNorm) / 18, 0.05, 1.0);
         a.carImpact = Math.max(a.carImpact, intensity);
         b.carImpact = Math.max(b.carImpact, intensity);
 
-        // AI collision recovery awareness so AI briefly stabilizes after contact
-        if (!a.isPlayer) a.aiMistakeTimer = Math.max(a.aiMistakeTimer, 0.45 * intensity);
-        if (!b.isPlayer) b.aiMistakeTimer = Math.max(b.aiMistakeTimer, 0.45 * intensity);
+        if (!a.isPlayer) a.aiMistakeTimer = Math.max(a.aiMistakeTimer, 0.35 * intensity);
+        if (!b.isPlayer) b.aiMistakeTimer = Math.max(b.aiMistakeTimer, 0.35 * intensity);
 
         // Granular Nose / Front Wing & Rear Diffuser damage on hard collisions
-        if (intensity > 0.32 && damageScale > 0) {
-          const dmgAmt = (intensity - 0.28) * 0.22 * damageScale;
-          if (sA > 0.65) a.wingDamage = Math.min(0.85, a.wingDamage + dmgAmt);
-          else if (sA < -0.65) a.diffuserDamage = Math.min(0.75, a.diffuserDamage + dmgAmt * 0.85);
-          if (sB > 0.65) b.wingDamage = Math.min(0.85, b.wingDamage + dmgAmt);
-          else if (sB < -0.65) b.diffuserDamage = Math.min(0.75, b.diffuserDamage + dmgAmt * 0.85);
+        if (intensity > 0.36 && damageScale > 0 && isRearEnd) {
+          const dmgAmt = (intensity - 0.32) * 0.18 * damageScale;
+          if (aDotN > 0.5) a.wingDamage = Math.min(0.85, a.wingDamage + dmgAmt);
+          else if (aDotN < -0.5) a.diffuserDamage = Math.min(0.75, a.diffuserDamage + dmgAmt * 0.8);
+          if (bDotN < -0.5) b.wingDamage = Math.min(0.85, b.wingDamage + dmgAmt);
+          else if (bDotN > 0.5) b.diffuserDamage = Math.min(0.75, b.diffuserDamage + dmgAmt * 0.8);
         }
 
-        if (intensity > 0.11) {
+        if (intensity > 0.16) {
           events.push({
-            pos: new THREE.Vector3(contactX, (a.pos.y + b.pos.y) * 0.5 + 0.36, contactZ),
+            pos: new THREE.Vector3((a.pos.x + b.pos.x) * 0.5, (a.pos.y + b.pos.y) * 0.5 + 0.36, (a.pos.z + b.pos.z) * 0.5),
             normal: new THREE.Vector3(nx, 0.25, nz).normalize(),
             intensity,
             type: colType,

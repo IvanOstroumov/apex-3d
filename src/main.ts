@@ -601,7 +601,10 @@ export class ApexGPGame {
     });
 
     // 5. Audio, AI & FIA Rules
-    bindRange('set-vol', 'lbl-set-vol', (v) => `${v}%`, (v) => { this.settings.masterVolume = v; });
+    bindRange('set-vol', 'lbl-set-vol', (v) => `${v}%`, (v) => {
+      this.settings.masterVolume = v;
+      this.audio.setMasterVolume(v);
+    });
     bindRange('set-ailevel', 'lbl-set-ailevel', (v) => `${v} / 110`, (v) => { this.settings.aiLevelNumber = v; });
     bindRange('set-aiagg', 'lbl-set-aiagg', (v) => `${v}%`, (v) => { this.settings.aiAggressionMult = v; });
     bindRange('set-dmg', 'lbl-set-dmg', (v) => `${v}%`, (v) => { this.settings.damageMult = v; });

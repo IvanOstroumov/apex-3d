@@ -263,26 +263,50 @@ export const TRACKS: TrackConfig[] = [
     asphaltMetalness: 0.14,
     groundColor: '#253b1a',
     curbColors: ['#b81818', '#dde2e8'],
-    drsZones: [[0.01, 0.15], [0.68, 0.85]],
-    samples: 720,
+    drsZones: [[0.01, 0.14], [0.74, 0.87]],
+    samples: 760,
     points: [
-      [-280, 0, -210],
-      [-280, 0, 20],
-      [-280, 0, 230],
-      [-248, 0, 332],
-      [-172, 0, 316],
-      [-105, 0, 370],
-      [55, 0, 392],
-      [215, 0, 338],
-      [310, 0, 205],
-      [268, 0, 75],
-      [330, 0, -25],
-      [290, 0, -145],
-      [225, 0, -275],
-      [105, 0, -342],
-      [-20, 0, -305],
-      [-125, 0, -355],
-      [-232, 0, -315]
+      // 1. Rettilineo Principale (Main Pit Straight)
+      [-290, 0, -240],
+      [-290, 0, -60],
+      [-290, 0, 110],
+      [-290, 0, 275],
+      // 2. Variante del Rettifilo (Turn 1-2 Tight Right-Left Chicane)
+      [-286, 0, 348],
+      [-254, 0, 372],
+      [-242, 0, 418],
+      // 3. Curva Grande / Biassono (Fast Sweeping Right through Royal Park)
+      [-192, 0, 478],
+      [-92, 0, 508],
+      [28, 0, 488],
+      [145, 0, 446],
+      // 4. Variante della Roggia (Left-Right Forest Chicane)
+      [196, 0, 428],
+      [218, 0, 456],
+      [268, 0, 442],
+      // 5. Curve di Lesmo 1 & Lesmo 2 (Twin Right-Handers)
+      [338, 0.8, 408],
+      [372, 1.5, 352],
+      [378, 1.8, 276],
+      [364, 1.4, 212],
+      [308, 0.5, 174],
+      // 6. Discesa del Serraglio (Dip under the Historic 1955 Banked Oval Bridge)
+      [212, -1.0, 108],
+      [112, -1.2, 38],
+      [24, -0.4, -24],
+      // 7. Variante Ascari (Fast Left-Right-Left Complex)
+      [-32, 0, -66],
+      [-22, 0, -108],
+      [-58, 0, -146],
+      // 8. Rettilineo Centrale (Back Straight towards Parabolica)
+      [-62, 0, -255],
+      [-62, 0, -385],
+      // 9. Curva Alboreto / Parabolica (Iconic 180° Opening-Radius Right Hairpin)
+      [-74, 0, -455],
+      [-145, 0, -502],
+      [-235, 0, -482],
+      [-284, 0, -415],
+      [-290, 0, -330]
     ]
   },
   {

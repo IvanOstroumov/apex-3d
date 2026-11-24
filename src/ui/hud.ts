@@ -945,7 +945,7 @@ export class HUDController {
       if (c.isPlayer) {
         ctx.save();
         ctx.translate(cx, cy);
-        ctx.rotate(Math.atan2(Math.sin(c.yaw), Math.cos(c.yaw)) - Math.PI * 0.5);
+        ctx.rotate(Math.atan2(Math.cos(c.yaw), Math.sin(c.yaw)));
         ctx.beginPath();
         ctx.moveTo(8, 0);
         ctx.lineTo(-5.5, -5.2);
