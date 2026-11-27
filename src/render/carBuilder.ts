@@ -1389,7 +1389,7 @@ export function buildF1Car(
     roughness: Math.max(0.04, team.roughness * (customPaintFinish === 'matte' ? 1.0 : 0.62)),
     clearcoat: team.clearcoat,
     clearcoatRoughness: customPaintFinish === 'matte' ? 0.45 : 0.02,
-    iridescence: customPaintFinish === 'pearl' ? 0.35 : 0.08,
+    iridescence: customPaintFinish === 'pearl' ? 0.35 : 0.0,
     iridescenceIOR: 1.38,
     reflectivity: 1.0,
     envMapIntensity: 2.05
@@ -1401,7 +1401,7 @@ export function buildF1Car(
     roughness: Math.max(0.04, team.roughness * (customPaintFinish === 'matte' ? 1.0 : 0.62)),
     clearcoat: team.clearcoat,
     clearcoatRoughness: customPaintFinish === 'matte' ? 0.45 : 0.02,
-    iridescence: customPaintFinish === 'pearl' ? 0.35 : 0.08,
+    iridescence: customPaintFinish === 'pearl' ? 0.35 : 0.0,
     iridescenceIOR: 1.38,
     reflectivity: 1.0,
     envMapIntensity: 2.05
@@ -1495,12 +1495,12 @@ export function buildF1Car(
     bodyGroup.add(haloMesh);
 
     const cabinGlassMat = ghostMat || new THREE.MeshPhysicalMaterial({
-      color: '#0b1320',
-      metalness: 0.15,
-      roughness: 0.05,
-      transmission: 0.45,
+      color: '#08101c',
+      metalness: 0.88,
+      roughness: 0.04,
+      clearcoat: 1.0,
       transparent: true,
-      opacity: 0.42,
+      opacity: 0.72,
       envMapIntensity: 2.2
     });
     const headlightMat = ghostMat || new THREE.MeshStandardMaterial({
