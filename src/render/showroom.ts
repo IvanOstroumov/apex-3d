@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import type { TeamConfig } from '../core/types';
-import { buildF1Car, type F1CarVisual } from './carBuilder';
+import { buildF1Car, type BuildCarOptions, type F1CarVisual } from './carBuilder';
 import { getCarbonTexture } from './textures';
 import { disposeObject3D } from '../core/disposer';
 
@@ -162,21 +162,28 @@ export class ShowroomStage {
     }, { passive: true });
   }
 
-  setTeam(team: TeamConfig, tireBandColor?: string): void {
+  setTeam(team: TeamConfig, tireBandColor?: string, customOpts?: Partial<BuildCarOptions>): void {
     if (this.currentCarVis) {
       this.turntable.remove(this.currentCarVis.root);
       disposeObject3D(this.currentCarVis.root); // ZERO GPU memory leak!
       this.currentCarVis = null;
     }
 
-    this.currentCarVis = buildF1Car(team, { tireBandColor, isPlayer: false, forceHeroLod: true });
+    this.currentCarVis = buildF1Car(team, {
+      tireBandColor,
+      isPlayer: false,
+      forceHeroLod: true,
+      ...customOpts
+    });
     this.turntable.add(this.currentCarVis.root);
 
-    const glowColor = team.id === 'monster' ? '#39ff14'
+    const glowColor = (customOpts?.customPaintColor && customOpts.customPaintColor.trim() !== '')
+      ? customOpts.customPaintColor
+      : team.id === 'monster' ? '#39ff14'
       : team.id === 'mercedes' ? '#00d2be'
       : team.id === 'redbull' ? '#ffd300'
       : team.id === 'mcdonalds' ? '#ffc72c'
-      : '#ff1e16';
+      : team.accentColor || '#ff1e16';
     this.ledRingMat.color.set(glowColor);
     this.ledRingMat.emissive.set(glowColor);
     this.accentPoint.color.set(glowColor);

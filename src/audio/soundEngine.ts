@@ -234,18 +234,45 @@ export class SoundEngine {
     if (this.ctx.state === 'suspended') this.ctx.resume();
 
     const now = this.ctx.currentTime;
-    const rpmNorm = Math.max(0, Math.min(1, (car.rpm - 4000) / 11000));
+    const maxRpm = car.team.physics.maxRpm ?? 15000;
+    const minRpm = maxRpm * 0.25;
+    const rpmNorm = Math.max(0, Math.min(1, (car.rpm - minRpm) / Math.max(1000, maxRpm - minRpm)));
     const speedNorm = Math.min(1, Math.abs(car.speed) / 98);
 
     const pu = car.team.physics.puTone;
-    const pitchMult = pu === 'ferrari' ? 1.04 : pu === 'honda' ? 0.94 : pu === 'monster' ? 1.01 : 0.98;
-    const harmRatio = pu === 'honda' ? 1.50 : 2.0;
+    let pitchMult = 1.0;
+    let harmRatio = 2.0;
+    let subRatio = 0.5;
+    let baseIdleHz = 72;
+    let spanHz = 168;
 
-    // Warm realistic V6 fundamental frequency range (72 Hz at idle -> 240 Hz at 15,000 RPM)
-    const baseFreq = (72 + rpmNorm * 168) * pitchMult;
+    if (pu === 'v10_screamer') {
+      // Audi R8 V10 / Huracán STO: 5-cyl-per-bank 2.5x harmonic wail
+      baseIdleHz = 66; spanHz = 178; harmRatio = 2.5; subRatio = 0.5;
+    } else if (pu === 'flat6_boxer') {
+      // Porsche 911 GT3 RS: metallic 1.5x boxer rasp
+      baseIdleHz = 68; spanHz = 172; harmRatio = 1.5; subRatio = 0.5;
+    } else if (pu === 'v8_biturbo') {
+      // Ferrari 488 / McLaren 720S / AMG GT / Jesko: flat-plane V8 growl
+      baseIdleHz = 56; spanHz = 148; harmRatio = 2.0; subRatio = 0.5;
+    } else if (pu === 'v8_supercharged') {
+      // Mustang Shelby GT500: deep cross-plane V8 rumble + supercharger whine
+      baseIdleHz = 46; spanHz = 122; harmRatio = 1.333; subRatio = 0.5;
+    } else if (pu === 'w16_quadturbo') {
+      // Bugatti Chiron W16: deep turbine bass thunder
+      baseIdleHz = 44; spanHz = 114; harmRatio = 2.0; subRatio = 0.375;
+    } else if (pu === 'i6_turbo') {
+      // Nissan GT-R / BMW M4 CSL: smooth 6-cylinder twin-turbo spool
+      baseIdleHz = 58; spanHz = 144; harmRatio = 1.5; subRatio = 0.5;
+    } else {
+      pitchMult = pu === 'ferrari' ? 1.04 : pu === 'honda' ? 0.94 : pu === 'monster' ? 1.01 : 0.98;
+      harmRatio = pu === 'honda' ? 1.50 : 2.0;
+    }
+
+    const baseFreq = (baseIdleHz + rpmNorm * spanHz) * pitchMult;
     this.oscMain.frequency.setTargetAtTime(baseFreq, now, 0.025);
     this.oscHarm.frequency.setTargetAtTime(baseFreq * harmRatio, now, 0.025);
-    this.oscSub.frequency.setTargetAtTime(baseFreq * 0.5, now, 0.025);
+    this.oscSub.frequency.setTargetAtTime(baseFreq * subRatio, now, 0.025);
 
     const cutoff = 320 + rpmNorm * 920 + car.throttleInput * 360;
     this.engineFilter.frequency.setTargetAtTime(cutoff, now, 0.035);
@@ -253,10 +280,19 @@ export class SoundEngine {
 
     this.tunnelWet.gain.setTargetAtTime(car.inTunnel ? 0.24 : 0.0, now, 0.08);
 
-    const turboFreq = 540 + rpmNorm * 680 + (car.ersActive ? 120 : 0);
-    this.oscTurbo.frequency.setTargetAtTime(turboFreq, now, 0.04);
-    const turboVol = (car.ersActive ? 0.018 : 0.008 * car.throttleInput) * (0.3 + rpmNorm * 0.7);
-    this.turboGain.gain.setTargetAtTime(turboVol, now, 0.05);
+    // Police Siren Wail (in Cops & Robbers mode) OR Supercharger/Turbo/MGU-H Whine
+    if (car.sirenActive) {
+      const sirenWail = 640 + Math.sin(now * 5.2) * 240;
+      this.oscTurbo.frequency.setTargetAtTime(sirenWail, now, 0.03);
+      this.turboGain.gain.setTargetAtTime(0.055, now, 0.04);
+    } else {
+      const isSupercharged = pu === 'v8_supercharged';
+      const turboFreq = (isSupercharged ? 760 : 540) + rpmNorm * (isSupercharged ? 980 : 680) + (car.ersActive ? 120 : 0);
+      this.oscTurbo.frequency.setTargetAtTime(turboFreq, now, 0.04);
+      const baseWhine = isSupercharged ? 0.022 * car.throttleInput : (car.ersActive ? 0.018 : 0.008 * car.throttleInput);
+      const turboVol = baseWhine * (0.3 + rpmNorm * 0.7);
+      this.turboGain.gain.setTargetAtTime(turboVol, now, 0.05);
+    }
 
     // 3D Spatial Rival Engine & Doppler Shift
     let closestDist = 24;

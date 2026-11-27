@@ -514,7 +514,7 @@ export function stepCarPhysics(
   const surfaceMuMult = car.offTrack ? (0.88 - 0.22 * offTrackSeverity) : car.onCurb ? 0.93 : 1.0;
   const mu = p.mechGrip * baseCompoundGrip * thermalMult * wearMult * damageGripPenalty * realRoadBonus * surfaceMuMult;
 
-  if (absV > 10 && settings.mode !== 'time_attack') {
+  if (absV > 10 && settings.mode !== 'time_attack' && settings.mode !== 'track_day' && settings.damageEnabled !== false) {
     const userWearScale = (settings.tireWearMult ?? 100) / 100;
     const careMult = car.isPlayer ? userWearScale : userWearScale / car.aiTireCare;
     const wearPerSec = (comp.wearRate / 65) * (0.45 + tireWork * 0.85) * (car.offTrack ? 1.8 : 1.0) * careMult;
@@ -522,6 +522,12 @@ export function stepCarPhysics(
     if (car.tireWear < 9 && !car.puncture && Math.random() < 0.0004) {
       car.puncture = true;
     }
+  }
+
+  // Eliminated (Knockout) or Arrested (Cops & Robbers) cars smoothly brake to a halt
+  if (car.eliminated || car.robberArrested) {
+    car.throttleInput = 0;
+    car.brakeInput = 0.9;
   }
 
   // Carbon-Ceramic Brake Temperature & Efficiency Window (400°C..850°C) (Item 9)
@@ -538,33 +544,44 @@ export function stepCarPhysics(
   car.brakeTemp += (brakeHeatTarget - car.brakeTemp) * Math.min(1, dt * brakeRate);
   const brakeEff = (car.brakeTemp < 310 ? 0.90 : car.brakeTemp > 920 ? 0.88 : 1.0) * effBrakePress;
 
-  // 7. POWERTRAIN, CLUTCH BITE-POINT LAUNCH CONTROL, SEAMLESS SHIFT CUT, VSC LIMITER, GEAR REV-LIMITER & CARBON BRAKES
+  // 7. POWERTRAIN, AWD/RWD DRIVETRAIN, CLUTCH PEDAL, GEAR RATIO TUNING & REV-LIMITER
   let fxEngine = 0;
   let rearSpinExcess = 0;
-  const vscMaxSpeed = vscActive ? 54 : 115;
+  const ratioTuningMult = car.isPlayer
+    ? (settings.gearRatioPreset === 'short' ? 0.92 : settings.gearRatioPreset === 'long' ? 1.08 : 1.0)
+    : 1.0;
+  const virusSpeedBoost = car.infected ? 1.09 : 1.0;
+  const gearMult = (p.gearSpeedMult ?? 1.0) * ratioTuningMult * virusSpeedBoost;
+  const vscMaxSpeed = vscActive ? 54 : 122 * gearMult;
   const activeGear = Math.max(1, Math.min(8, car.gear));
-  const gearMaxSpeed = car.gear === -1 ? 18 : GEAR_MAX_SPEEDS[activeGear];
+  const gearMaxSpeed = car.gear === -1 ? 18 : GEAR_MAX_SPEEDS[activeGear] * gearMult;
+  const clutchEngage = 1 - THREE.MathUtils.clamp((car.clutchInput ?? 0) * 0.95, 0, 0.95);
 
-  if (car.throttleInput > 0.01 && vFwd >= -0.5 && car.shiftCutTimer <= 0 && vFwd < vscMaxSpeed) {
+  if (car.throttleInput > 0.01 && vFwd >= -0.5 && car.shiftCutTimer <= 0 && vFwd < vscMaxSpeed && car.gear !== 0) {
     const ersKW = car.ersActive ? p.ersPowerKW * effPowerMult : 0;
-    const totalPowerWatts = (p.icePowerKW + ersKW) * 1000;
-    let launchBiteMult = 1.0;
+    const totalPowerWatts = (p.icePowerKW + ersKW) * 1000 * virusSpeedBoost;
+    let launchBiteMult = p.drivetrain === 'AWD' ? 1.16 : 1.0;
     if (raceClock < 1.6 && vFwd < 26) {
-      if (car.rpm >= 9200 && car.rpm <= 12200) {
-        launchBiteMult = 1.14;
-      } else if (car.throttleInput > 0.92 && car.rpm > 12800 && settings.tractionControl === 'off') {
-        launchBiteMult = 0.86;
+      const optLow = (p.maxRpm ?? 15000) * 0.60;
+      const optHigh = (p.maxRpm ?? 15000) * 0.82;
+      if (car.rpm >= optLow && car.rpm <= optHigh) {
+        launchBiteMult *= 1.14;
+      } else if (car.throttleInput > 0.92 && car.rpm > optHigh * 1.05 && settings.tractionControl === 'off' && p.drivetrain !== 'AWD') {
+        launchBiteMult *= 0.86;
         rearSpinExcess = 0.65;
       }
     }
     const offTrackTorqueMult = car.offTrack ? (0.82 - 0.18 * offTrackSeverity) : 1.0;
-    // Physical 15,000 RPM Gear Ratio Rev-Limiter: in 1st gear (~95 km/h), torque cuts off at the redline!
+    const ratioAccelMult = car.isPlayer
+      ? (settings.gearRatioPreset === 'short' ? 1.08 : settings.gearRatioPreset === 'long' ? 0.94 : 1.0)
+      : 1.0;
     const revLimiterMult = car.gear > 0
       ? THREE.MathUtils.clamp((gearMaxSpeed * 1.02 - vFwd) / (gearMaxSpeed * 0.06), 0, 1)
       : 1.0;
-    const gearTorqueCap = (car.gear <= 1 ? 13200 : car.gear === 2 ? 13900 : 14300) * launchBiteMult * offTrackTorqueMult;
+    const gearTorqueCap = (car.gear <= 1 ? 13800 : car.gear === 2 ? 14400 : 14900)
+      * launchBiteMult * offTrackTorqueMult * ratioAccelMult;
     const rawDriveForce = Math.min(gearTorqueCap, totalPowerWatts / Math.max(14.0, vFwd));
-    fxEngine = car.throttleInput * rawDriveForce * revLimiterMult;
+    fxEngine = car.throttleInput * rawDriveForce * revLimiterMult * clutchEngage;
   }
 
   // Mechanical engine over-rev compression braking if player downshifts into a lower gear above its max speed
@@ -593,7 +610,7 @@ export function stepCarPhysics(
   const fwdDotTangent = fwdX * tInfo.tangentX + fwdZ * tInfo.tangentZ;
   const fSlope = -mass * GAME_CONSTANTS.GRAVITY * tInfo.tangentY * fwdDotTangent;
 
-  // 8. PACEJKA SLIP-ANGLE CORNERING, HIGH-SPEED DOWNFORCE PLANTEDNESS & INSTANT COUNTER-STEER AUTHORITY
+  // 8. PACEJKA SLIP-ANGLE CORNERING, AWD/RWD TRACTION & INSTANT COUNTER-STEER AUTHORITY
   let shapedSteer = car.steerInput;
   if (car.isPlayer) {
     const dz = (settings.steerDeadzone ?? 3) / 100;
@@ -618,9 +635,8 @@ export function stepCarPhysics(
     const dirSign = vFwd >= -0.5 ? 1 : -1;
     const vLeft = -vLat;
 
-    // Wider 405mm F1 rear Pirelli slicks + high-speed ground-effect diffuser stability
-    const rearStabilityMult = 1.18 + 0.10 * speedRatio;
-    // Counter-steer authority: when steering opposite to an active slide or direction change, front tires bite immediately!
+    const isAWD = p.drivetrain === 'AWD';
+    const rearStabilityMult = (isAWD ? 1.24 : 1.18) + 0.10 * speedRatio;
     const bodySlip = Math.atan2(vLeft, vSafe);
     const isCounterSteering = shapedSteer * vLat > 0 || shapedSteer * car.yawRate < -0.05;
     const effectiveSlipF = isCounterSteering ? bodySlip * 0.22 : bodySlip * 0.62;
@@ -628,7 +644,7 @@ export function stepCarPhysics(
     const alphaR = Math.atan2(vLeft - car.yawRate * WHEELBASE_R, vSafe);
 
     const maxGripF = mu * fzFront;
-    const maxGripR = mu * rearStabilityMult * fzRear;
+    const maxGripR = mu * rearStabilityMult * fzRear * (isAWD ? 1.15 : 1.0);
 
     const useAbs = !car.isPlayer || settings.abs;
     if (fxBrakeFront > maxGripF * 0.93) {
@@ -645,7 +661,7 @@ export function stepCarPhysics(
 
     const fxRearCmd = fxEngine - fxBrakeRear;
     const tcLevel = !car.isPlayer ? 'med' : settings.tractionControl;
-    const tcLimit = tcLevel === 'full' ? 0.84 : tcLevel === 'med' ? 0.90 : 0.96;
+    const tcLimit = (tcLevel === 'full' ? 0.84 : tcLevel === 'med' ? 0.90 : 0.96) * (isAWD ? 1.12 : 1.0);
     const rearLongFrac = Math.abs(fxRearCmd) / (maxGripR + 1);
     let effFxRear = fxRearCmd;
     if (rearLongFrac > tcLimit) {
@@ -657,7 +673,6 @@ export function stepCarPhysics(
         effFxRear = Math.sign(fxRearCmd) * maxGripR * (car.offTrack ? 0.78 : 0.91);
       }
     }
-    // High-speed F1 downforce & wider rear slicks keep rear lateral authority >= 0.80..0.90 under throttle!
     const minLatR = car.offTrack ? 0.72 : (tcLevel === 'full' ? 0.92 : tcLevel === 'med' ? 0.88 : 0.78);
     const availLatR = Math.max(minLatR, Math.sqrt(Math.max(0.5, 1 - Math.pow(effFxRear / (maxGripR * 1.25 + 1), 2))));
     const fyLeftRear = pacejkaLateral(alphaR, mu * rearStabilityMult * availLatR, fzRear);
@@ -671,7 +686,6 @@ export function stepCarPhysics(
     fyFront = -fyLeftFront + fCamber * 0.5;
     fyRear = -fyLeftRear + fCamber * 0.5;
 
-    // On-Throttle & Off-Throttle Differential Locking + Strong Self-Aligning Aero/Pneumatic Trail Stability
     const diffLock = car.isPlayer
       ? (car.throttleInput > 0.25 ? (settings.customDiffOnThrottle ?? 72) : (settings.customDiffOffThrottle ?? 60)) / 70
       : 1.0;
@@ -686,7 +700,6 @@ export function stepCarPhysics(
     const dYaw = car.yawRate * dt;
     car.yaw += dYaw;
 
-    // Exact orthogonal 2D rotation of velocity into the new car heading (strictly conserves kinetic energy!)
     const cosD = Math.cos(dYaw);
     const sinD = Math.sin(dYaw);
     const rotFwd = vFwd * cosD - vLat * sinD;
@@ -696,7 +709,6 @@ export function stepCarPhysics(
 
     const aLat = (fyFront + fyRear) / mass;
     vLat += aLat * dt;
-    // Lateral grip increases with speed (aerodynamic downforce plants the car on rails at high speed!)
     const latScrubDamp = (car.offTrack ? 4.2 + offTrackSeverity * 2.2 : 3.6 + speedRatio * 1.8) + (absV < 14 ? 4.0 : 0);
     vLat *= Math.exp(-latScrubDamp * dt);
 
@@ -717,11 +729,12 @@ export function stepCarPhysics(
   const prevFwd = vFwd;
   vFwd += aLong * dt;
   if (prevFwd > 0 && vFwd < 0 && effBrakeInput > 0.05 && car.throttleInput < 0.05) vFwd = 0;
-  const maxAllowedFwd = car.offTrack ? Math.max(42, 86 - offTrackSeverity * 24) : 108;
+  const topCapMS = 108 * gearMult;
+  const maxAllowedFwd = car.offTrack ? Math.max(42, 86 - offTrackSeverity * 24) : topCapMS;
   if (car.offTrack && vFwd > maxAllowedFwd) {
     vFwd -= (vFwd - maxAllowedFwd) * Math.min(1, dt * 3.8);
   }
-  vFwd = THREE.MathUtils.clamp(vFwd, -18, 108);
+  vFwd = THREE.MathUtils.clamp(vFwd, -18, topCapMS);
   vLat = THREE.MathUtils.clamp(vLat, -18, 18);
 
   const newSin = Math.sin(car.yaw);
@@ -758,8 +771,8 @@ export function stepCarPhysics(
     if (vn * sign > 0) {
       const impact = Math.min(1, Math.abs(vn) / 20);
       car.wallImpact = impact;
-      const dmgScale = (settings.damageMult ?? 100) / 100;
-      if (impact > 0.35 && settings.mode !== 'time_attack' && dmgScale > 0) {
+      const dmgScale = settings.damageEnabled === false ? 0 : (settings.damageMult ?? 100) / 100;
+      if (impact > 0.35 && settings.mode !== 'time_attack' && settings.mode !== 'track_day' && dmgScale > 0) {
         if (postFwdDot >= 0) {
           car.wingDamage = Math.min(0.85, car.wingDamage + (impact - 0.30) * 0.25 * dmgScale);
         } else {
@@ -780,8 +793,14 @@ export function stepCarPhysics(
     }
   }
 
-  // 10. 8-SPEED GEARBOX WITH SEAMLESS SHIFT CUT
-  updateGearbox(car, settings.manualGearbox && car.isPlayer, dt);
+  // 10. 8-SPEED GEARBOX WITH H-SHIFTER, PADDLES & SEAMLESS SHIFT CUT
+  updateGearbox(
+    car,
+    (settings.manualGearbox || settings.shifterMode === 'h_pattern') && car.isPlayer,
+    gearMult,
+    p.maxRpm ?? 15000,
+    dt
+  );
 
   // 11. LAP, 3-SECTOR TIMING & REAL-ROAD EVOLUTION
   updateRaceProgress(car, postInfo, track, raceClock, sessionBest);
@@ -789,11 +808,14 @@ export function stepCarPhysics(
   return postInfo;
 }
 
-function updateGearbox(car: CarState, isManual: boolean, dt: number) {
+function updateGearbox(car: CarState, isManual: boolean, gearMult: number, maxRpm: number, dt: number) {
   const prevGear = car.gear;
   const absSpd = Math.abs(car.speed);
 
-  if (isManual) {
+  if (car.directGearReq !== undefined && car.directGearReq !== null) {
+    car.gear = car.directGearReq;
+    car.directGearReq = null;
+  } else if (isManual) {
     if (car.shiftUpReq) {
       car.gear = Math.min(8, Math.max(1, car.gear + 1));
       car.shiftUpReq = false;
@@ -808,11 +830,10 @@ function updateGearbox(car: CarState, isManual: boolean, dt: number) {
       car.gear = 0;
     } else {
       let g = car.gear <= 0 ? 1 : car.gear;
-      // Upshift at 91% of current gear max speed (before rev-limiter!), downshift at 75% of previous gear max speed
-      while (g < 8 && car.speed > GEAR_MAX_SPEEDS[g] * 0.91) {
+      while (g < 8 && car.speed > GEAR_MAX_SPEEDS[g] * gearMult * 0.91) {
         g++;
       }
-      while (g > 1 && car.speed < GEAR_MAX_SPEEDS[g - 1] * 0.75) {
+      while (g > 1 && car.speed < GEAR_MAX_SPEEDS[g - 1] * gearMult * 0.75) {
         g--;
       }
       car.gear = g;
@@ -823,23 +844,27 @@ function updateGearbox(car: CarState, isManual: boolean, dt: number) {
     if (car.gear > prevGear) {
       car.justShifted = true;
       car.shiftFlameTimer = 0.11;
-      car.shiftCutTimer = 0.032; // 32ms seamless shift cut
+      car.shiftCutTimer = (car.clutchInput ?? 0) > 0.35 ? 0.012 : 0.032;
     } else {
       car.justDownshifted = true;
     }
   }
 
-  if (car.gear <= 0) {
-    const rev = car.gear === -1 ? 5200 + absSpd * 260 : 4200 + car.throttleInput * 7500;
-    car.rpm += (rev - car.rpm) * Math.min(1, dt * 12);
+  const idleRpm = maxRpm * 0.27;
+  const spanRpm = maxRpm - idleRpm;
+  if (car.gear <= 0 || (car.clutchInput ?? 0) > 0.45) {
+    const rev = car.gear === -1
+      ? idleRpm + absSpd * (spanRpm * 0.03)
+      : idleRpm + car.throttleInput * (spanRpm * 0.92);
+    car.rpm += (rev - car.rpm) * Math.min(1, dt * 14);
   } else {
-    const minG = GEAR_MAX_SPEEDS[car.gear - 1] * 0.74;
-    const maxG = GEAR_MAX_SPEEDS[car.gear];
+    const minG = GEAR_MAX_SPEEDS[car.gear - 1] * gearMult * 0.74;
+    const maxG = GEAR_MAX_SPEEDS[car.gear] * gearMult;
     const ratio = THREE.MathUtils.clamp((car.speed - minG) / Math.max(1, maxG - minG), 0, 1.05);
-    const targetRpm = 6200 + ratio * 8700;
+    const targetRpm = idleRpm + spanRpm * (0.15 + ratio * 0.84);
     car.rpm += (targetRpm - car.rpm) * Math.min(1, dt * 18);
   }
-  car.rpm = THREE.MathUtils.clamp(car.rpm, 4000, 15000);
+  car.rpm = THREE.MathUtils.clamp(car.rpm, idleRpm * 0.9, maxRpm);
 }
 
 function updateRaceProgress(
@@ -925,6 +950,8 @@ export interface CarCollisionEvent {
   type: 'wheel_rub' | 'rear_end' | 'side_slam';
   involvesPlayer: boolean;
   primaryColor: string;
+  infectionSpread?: boolean;
+  robberBusted?: boolean;
 }
 
 export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCollisionEvent[] {
@@ -987,6 +1014,16 @@ export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCo
       const effRadius = 1.0 / gLen;
       const overlap = (1.0 - ellipDist) * effRadius;
 
+      // Arcade Mode 7: INFECTION / VIRUS contagion on any physical hull contact!
+      let infectionSpread = false;
+      if (a.infected && !b.infected) {
+        b.infected = true;
+        infectionSpread = true;
+      } else if (b.infected && !a.infected) {
+        a.infected = true;
+        infectionSpread = true;
+      }
+
       // Classify contact: rear-end (nose to diffuser) vs wheel-to-wheel side rub
       const aDotN = aFwdX * nx + aFwdZ * nz;
       const bDotN = bFwdX * nx + bFwdZ * nz;
@@ -1019,10 +1056,25 @@ export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCo
       const rvz = b.vel.z - a.vel.z;
       const relNorm = rvx * nx + rvz * nz;
 
+      let robberBusted = false;
+      // Arcade Mode 6: COPS & ROBBERS Police Takedown damage on contact
+      if ((a.copsRole === 'COP' && b.copsRole === 'ROBBER') || (b.copsRole === 'COP' && a.copsRole === 'ROBBER')) {
+        const robber = a.copsRole === 'ROBBER' ? a : b;
+        if (!robber.robberArrested) {
+          const hitDmg = Math.max(2.5, Math.abs(relNorm) * 2.4);
+          robber.robberHealth = Math.max(0, (robber.robberHealth ?? 100) - hitDmg);
+          if (robber.robberHealth <= 0) {
+            robber.robberArrested = true;
+            robberBusted = true;
+          }
+        }
+      }
+
       // Only apply velocity impulse if cars are actually moving toward each other (no 240Hz artificial bounce!)
-      if (relNorm < -0.05) {
+      if (relNorm < -0.05 || infectionSpread || robberBusted) {
+        const effRelNorm = Math.min(-0.1, relNorm);
         const restitution = isWheelRub ? 0.12 : isRearEnd ? 0.22 : 0.25;
-        const jImp = -(1 + restitution) * relNorm;
+        const jImp = -(1 + restitution) * effRelNorm;
 
         // Light tangential scrub
         const tx = -nz;
@@ -1048,7 +1100,7 @@ export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCo
         b.speed = b.vel.x * bFwdX + b.vel.z * bFwdZ;
         b.lateralSpeed = THREE.MathUtils.clamp(b.vel.x * bRightX + b.vel.z * bRightZ, -12, 12);
 
-        const intensity = THREE.MathUtils.clamp(Math.abs(relNorm) / 18, 0.05, 1.0);
+        const intensity = THREE.MathUtils.clamp(Math.abs(effRelNorm) / 18, 0.05, 1.0);
         a.carImpact = Math.max(a.carImpact, intensity);
         b.carImpact = Math.max(b.carImpact, intensity);
 
@@ -1064,14 +1116,16 @@ export function resolveCarCollisions(cars: CarState[], damageScale = 1.0): CarCo
           else if (bDotN > 0.5) b.diffuserDamage = Math.min(0.75, b.diffuserDamage + dmgAmt * 0.8);
         }
 
-        if (intensity > 0.16) {
+        if (intensity > 0.16 || infectionSpread || robberBusted) {
           events.push({
             pos: new THREE.Vector3((a.pos.x + b.pos.x) * 0.5, (a.pos.y + b.pos.y) * 0.5 + 0.36, (a.pos.z + b.pos.z) * 0.5),
             normal: new THREE.Vector3(nx, 0.25, nz).normalize(),
-            intensity,
+            intensity: Math.max(intensity, infectionSpread || robberBusted ? 0.65 : 0),
             type: colType,
             involvesPlayer: a.isPlayer || b.isPlayer,
-            primaryColor: a.isPlayer ? b.team.primaryColor : a.team.primaryColor
+            primaryColor: infectionSpread ? '#39ff14' : robberBusted ? '#00a8ff' : (a.isPlayer ? b.team.primaryColor : a.team.primaryColor),
+            infectionSpread,
+            robberBusted
           });
         }
       }

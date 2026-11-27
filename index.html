@@ -27,7 +27,7 @@
     </header>
 
     <div class="menu-body">
-      <!-- Left Main Navigation Dock (Play, Garage, Wiki, Settings) -->
+      <!-- Left Main Navigation Dock (Play, Garage, Multiplayer, Wiki, Settings) -->
       <nav class="menu-nav-dock">
         <button id="nav-btn-play" class="nav-dock-btn nav-play-cta">
           <span class="nav-dock-icon">▶</span>
@@ -36,6 +36,10 @@
         <button id="nav-btn-garage" class="nav-dock-btn active">
           <span class="nav-dock-icon">🏎️</span>
           <span id="ui-nav-garage">🏎️ GARAGE F1</span>
+        </button>
+        <button id="nav-btn-multiplayer" class="nav-dock-btn">
+          <span class="nav-dock-icon">🌐</span>
+          <span id="ui-nav-multiplayer">🌐 MULTIPLAYER</span>
         </button>
         <button id="btn-open-wiki-menu" class="nav-dock-btn" title="Enciclopedia &amp; Guida Meccaniche F1 (W)">
           <span class="nav-dock-icon">📖</span>
@@ -47,40 +51,123 @@
         </button>
       </nav>
 
-      <!-- VIEW 1: 3D GARAGE / SHOWROOM (10 Scuderias + Engineer Setup, Zero Scrollbars) -->
+      <!-- VIEW 1: 3D GARAGE / SHOWROOM (10 F1 Scuderias + 12 Supercars/Hypercars + Paint & Quick Tuning) -->
       <aside id="menu-view-garage" class="panel panel-garage">
         <div class="panel-title">
           <span class="step-num">01</span>
-          <h2 id="ui-panel1-title">10 SCUDERIE &amp; INGEGNERE ASSETTO</h2>
+          <h2 id="ui-panel1-title">PARCO AUTO (22 VEICOLI) &amp; ASSETTO</h2>
         </div>
 
-        <div id="team-list" class="team-list-grid"></div>
+        <div class="garage-cat-tabs">
+          <button id="btn-cat-f1" class="garage-cat-btn active" type="button">🏎️ F1 (10)</button>
+          <button id="btn-cat-supercars" class="garage-cat-btn" type="button">🚘 SUPERCAR (12)</button>
+          <button id="btn-cat-custom" class="garage-cat-btn" type="button">🎨 VERNICE &amp; TUNING</button>
+        </div>
 
-        <div class="car-specs">
-          <div class="car-specs-head">
-            <span id="spec-number" class="spec-number">#16</span>
-            <div>
-              <h3 id="spec-team-name">Scuderia Ferrari</h3>
-              <p id="spec-tagline">Bilanciata, grande trazione</p>
+        <div id="garage-main-pane">
+          <div id="team-list" class="team-list-grid"></div>
+
+          <div class="car-specs">
+            <div class="car-specs-head">
+              <span id="spec-number" class="spec-number">#16</span>
+              <div>
+                <h3 id="spec-team-name">Scuderia Ferrari</h3>
+                <p id="spec-tagline">Bilanciata, grande trazione</p>
+              </div>
+            </div>
+            <div class="stats-grid">
+              <div class="stat-row">
+                <div class="stat-label"><span id="ui-stat-speed">VELOCITÀ</span><span id="val-speed">95</span></div>
+                <div class="stat-bar"><div id="bar-speed" class="stat-fill"></div></div>
+              </div>
+              <div class="stat-row">
+                <div class="stat-label"><span id="ui-stat-accel">ACCEL.</span><span id="val-accel">97</span></div>
+                <div class="stat-bar"><div id="bar-accel" class="stat-fill"></div></div>
+              </div>
+              <div class="stat-row">
+                <div class="stat-label"><span id="ui-stat-grip">GRIP</span><span id="val-grip">93</span></div>
+                <div class="stat-bar"><div id="bar-grip" class="stat-fill"></div></div>
+              </div>
+              <div class="stat-row">
+                <div class="stat-label"><span id="ui-stat-aero">AERO/TRAZ.</span><span id="val-boost">93</span></div>
+                <div class="stat-bar"><div id="bar-boost" class="stat-fill"></div></div>
+              </div>
             </div>
           </div>
-          <div class="stats-grid">
-            <div class="stat-row">
-              <div class="stat-label"><span id="ui-stat-speed">VELOCITÀ</span><span id="val-speed">95</span></div>
-              <div class="stat-bar"><div id="bar-speed" class="stat-fill"></div></div>
+        </div>
+
+        <!-- Aesthetic Customization & Quick Tuning Pane -->
+        <div id="garage-custom-pane" class="garage-custom-pane hidden">
+          <div class="custom-group">
+            <div class="custom-row-head">
+              <span class="setup-label">COLORE CARROZZERIA &amp; VERNICE</span>
+              <button id="btn-paint-reset" class="mini-reset-btn" type="button">↺ Livrea Originale</button>
             </div>
-            <div class="stat-row">
-              <div class="stat-label"><span id="ui-stat-accel">ACCEL.</span><span id="val-accel">97</span></div>
-              <div class="stat-bar"><div id="bar-accel" class="stat-fill"></div></div>
+            <div class="paint-picker-row">
+              <input type="color" id="opt-paint-color" class="color-wheel-input" value="#e10600" title="Seleziona Colore Carrozzeria" />
+              <div class="paint-swatches">
+                <button type="button" class="paint-swatch-btn" data-color="#e10600" style="background:#e10600" title="Rosso Corsa"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#ffd300" style="background:#ffd300" title="Giallo Modena"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#39ff14" style="background:#39ff14" title="Verde Mantis"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#00a8ff" style="background:#00a8ff" title="Azzurro Miami"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#ff6600" style="background:#ff6600" title="Arancio Papaya"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#8b00ff" style="background:#8b00ff" title="Viola Hyper"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#f4f7fc" style="background:#f4f7fc" title="Bianco Perla"></button>
+                <button type="button" class="paint-swatch-btn" data-color="#181c24" style="background:#181c24" title="Nero Stealth"></button>
+              </div>
             </div>
-            <div class="stat-row">
-              <div class="stat-label"><span id="ui-stat-grip">GRIP</span><span id="val-grip">93</span></div>
-              <div class="stat-bar"><div id="bar-grip" class="stat-fill"></div></div>
-            </div>
-            <div class="stat-row">
-              <div class="stat-label"><span id="ui-stat-aero">AERO/DRS</span><span id="val-boost">93</span></div>
-              <div class="stat-bar"><div id="bar-boost" class="stat-fill"></div></div>
-            </div>
+          </div>
+
+          <div class="custom-selects-grid">
+            <label class="custom-cell">
+              <span class="setup-label">FINITURA VERNICE</span>
+              <select id="opt-paint-finish" class="mini-select">
+                <option value="default" selected>Finitura: Originale</option>
+                <option value="metallic">Vernice Metallizzata</option>
+                <option value="matte">Vernice Opaca (Matte)</option>
+                <option value="pearl">Vernice Perlata</option>
+                <option value="chrome">Cromata Specchio</option>
+              </select>
+            </label>
+            <label class="custom-cell">
+              <span class="setup-label">LIVREA &amp; STRISCE</span>
+              <select id="opt-livery-style" class="mini-select">
+                <option value="stock" selected>Livrea: Ufficiale</option>
+                <option value="stripes">Doppie Strisce Racing</option>
+                <option value="carbon_hood">Cofano &amp; Tetto Carbonio</option>
+              </select>
+            </label>
+            <label class="custom-cell">
+              <span class="setup-label">CERCHIONI IN LEGA</span>
+              <select id="opt-rim-color" class="mini-select">
+                <option value="" selected>Cerchi: Originali</option>
+                <option value="#dce3ee">Argento Forgiato</option>
+                <option value="#d4af37">Oro Champagne</option>
+                <option value="#14181f">Nero Satinato</option>
+                <option value="#a87948">Bronzo Corsa</option>
+                <option value="#ff1e16">Rosso Racing</option>
+                <option value="#00e5ff">Ciano Neon</option>
+              </select>
+            </label>
+            <label class="custom-cell">
+              <span class="setup-label">RAPPORTI CAMBIO</span>
+              <select id="opt-gear-ratio" class="mini-select">
+                <option value="balanced" selected>Cambio: Bilanciato</option>
+                <option value="short">Rapporti Corti (Accel.)</option>
+                <option value="long">Rapporti Lunghi (Vmax)</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="custom-tuning-row">
+            <label class="slider-cell">
+              <div class="slider-head"><span>PRESSIONE GOMME</span><strong id="val-quick-psi">22.5 PSI</strong></div>
+              <input type="range" id="opt-quick-psi" min="20" max="26" step="0.5" value="22.5" />
+            </label>
+            <label class="toggle-chip custom-dmg-chip">
+              <input type="checkbox" id="opt-damage-enabled" checked />
+              <span>💥 Danni &amp; Usura Gomme Attivi</span>
+            </label>
           </div>
         </div>
 
@@ -131,18 +218,23 @@
         </div>
       </aside>
 
-      <!-- VIEW 2: DEDICATED PLAY / RACE & CIRCUIT HUB (2D Map + Satellite View, Zero Scrollbars) -->
+      <!-- VIEW 2: DEDICATED PLAY / RACE & CIRCUIT HUB (9 Modalità Sim & Arcade + Orario + Meteo) -->
       <section id="menu-view-play" class="panel panel-play-hub hidden">
         <div class="play-hub-header">
           <div class="panel-title">
             <span class="step-num">02</span>
-            <h2 id="ui-panel2-title">MODALITÀ DI GARA &amp; CIRCUITO</h2>
+            <h2 id="ui-panel2-title">MODALITÀ SIM &amp; ARCADE • CIRCUITO</h2>
           </div>
           <div id="mode-tabs" class="mode-tabs-wide">
-            <button class="mode-btn active" data-mode="quick_race">GARA VELOCE</button>
-            <button class="mode-btn" data-mode="weekend">QUALIFICA+GP</button>
-            <button class="mode-btn" data-mode="championship">CAMPIONATO</button>
-            <button class="mode-btn" data-mode="time_attack">TIME ATTACK</button>
+            <button class="mode-btn active" data-mode="quick_race" title="Gara Standard Gran Premio">GARA GP</button>
+            <button class="mode-btn" data-mode="weekend" title="Qualifica Giro Secco + Gran Premio">QUALIFICA+GP</button>
+            <button class="mode-btn" data-mode="championship" title="Campionato Mondiale su 4 Circuiti">CAMPIONATO</button>
+            <button class="mode-btn" data-mode="time_attack" title="Sfida a Tempo con Ghost Car">TIME ATTACK</button>
+            <button class="mode-btn" data-mode="track_day" title="Sessione Libera Senza Limiti &amp; Drag Race">TRACK DAY</button>
+            <button class="mode-btn" data-mode="knockout" title="Ogni 35s l'ultimo in classifica viene eliminato!">KNOCKOUT ⏱️</button>
+            <button class="mode-btn" data-mode="team_race" title="Gara a Squadre: Squadra Rossa vs Squadra Blu">SQUADRE 🔴🔵</button>
+            <button class="mode-btn" data-mode="cops_robbers" title="Guardie (Sirena [G]) vs Ladri in fuga">GUARDIE &amp; LADRI 🚓</button>
+            <button class="mode-btn" data-mode="infection" title="Auto Infetta ☣️ contagia le auto sane al contatto">INFECTION ☣️</button>
           </div>
         </div>
 
@@ -150,12 +242,17 @@
           <div class="play-hub-left">
             <div id="track-list" class="track-list"></div>
 
-            <div class="config-selects-two">
+            <div class="config-selects-three">
               <select id="opt-weather" class="mini-select" title="Meteo">
                 <option value="dry" selected>☀️ Asciutto</option>
                 <option value="overcast">⛅ Nuvoloso</option>
                 <option value="rain">🌧️ Pioggia</option>
                 <option value="dynamic">🌦️ Dinamico</option>
+              </select>
+              <select id="opt-tod-preset" class="mini-select" title="Orario della Giornata">
+                <option value="day" selected>☀️ Giorno</option>
+                <option value="sunset">🌅 Tramonto</option>
+                <option value="night">🌙 Notte</option>
               </select>
               <select id="opt-difficulty" class="mini-select" title="Difficoltà AI">
                 <option value="rookie">AI: Rookie</option>
@@ -191,6 +288,124 @@
           </div>
         </div>
       </section>
+
+      <!-- VIEW 3: MULTIPLAYER ROOMS, CHAT & INVITE LINK HUB -->
+      <section id="menu-view-multiplayer" class="panel panel-play-hub hidden">
+        <div class="play-hub-header">
+          <div class="panel-title">
+            <span class="step-num">03</span>
+            <h2 id="ui-mp-title">LOBBY MULTIPLAYER AVANZATA (STANZE, CHAT &amp; MODALITÀ)</h2>
+          </div>
+        </div>
+
+        <div class="play-hub-grid">
+          <!-- Left Column: Driver Name, Create Room, Join by Code, Share Link & Host Settings -->
+          <div class="play-hub-left mp-col-left">
+            <div class="mp-box">
+              <label class="mp-field-label" id="ui-mp-name-label" for="mp-driver-name">IL TUO NOME PILOTA (TAG FIA)</label>
+              <input id="mp-driver-name" class="mp-text-input" type="text" maxlength="16" placeholder="PILOTA 16" value="PILOTA 16" />
+            </div>
+
+            <!-- Shown when not yet in a room -->
+            <div id="mp-setup-actions" class="mp-box">
+              <button id="btn-mp-create" class="btn-primary-launch mp-create-btn" type="button">
+                <span id="ui-mp-create-btn">➕ CREA NUOVA STANZA</span>
+              </button>
+              <div class="mp-divider"><span id="ui-mp-or-join">OPPURE ENTRA CON CODICE</span></div>
+              <div class="mp-join-row">
+                <input id="mp-join-code" class="mp-text-input mp-code-input" type="text" maxlength="12" placeholder="Es. APEX-4821" />
+                <button id="btn-mp-join" class="btn-secondary mp-join-btn" type="button">ENTRA ▶</button>
+              </div>
+            </div>
+
+            <!-- Shown when inside an active room -->
+            <div id="mp-active-room-box" class="mp-box mp-room-card hidden">
+              <div class="mp-room-head">
+                <div>
+                  <span id="ui-mp-room-code-lbl" class="meta-k">CODICE STANZA</span>
+                  <div id="mp-room-code-display" class="mp-room-code-big">APEX-0000</div>
+                </div>
+                <button id="btn-mp-leave" class="mp-leave-btn" type="button">🚪 ESCI</button>
+              </div>
+
+              <div class="mp-share-row">
+                <button id="btn-mp-copy-code" class="mp-share-btn" type="button">📋 COPIA CODICE</button>
+                <button id="btn-mp-copy-link" class="mp-share-btn accent-cyan" type="button">🔗 COPIA LINK INVITO</button>
+              </div>
+
+              <div class="mp-host-settings">
+                <div class="mp-track-summary">
+                  <span id="ui-mp-circuit-lbl" class="meta-k">CONFIGURAZIONE STANZA (HOST)</span>
+                  <strong id="mp-room-track-label">Autodromo Nazionale Monza • ☀️ Asciutto</strong>
+                </div>
+                <div class="mp-host-selects-grid">
+                  <select id="mp-opt-mode" class="mini-select" title="Modalità di Gioco Stanza">
+                    <option value="quick_race" selected>🏁 Gara Standard GP</option>
+                    <option value="time_attack">⏱️ Time Attack</option>
+                    <option value="track_day">🛞 Track Day / Free Roam</option>
+                    <option value="knockout">💀 Eliminazione (Knockout)</option>
+                    <option value="team_race">🔴🔵 Team Race (Squadre)</option>
+                    <option value="cops_robbers">🚓 Guardie e Ladri</option>
+                    <option value="infection">☣️ Infection / Virus</option>
+                  </select>
+                  <select id="mp-opt-track" class="mini-select" title="Pista Stanza">
+                    <option value="monza" selected>🇮🇹 Monza GP</option>
+                    <option value="alpine">🇦🇹 Alpine Ring</option>
+                    <option value="desert">🇧🇭 Desert Mirage</option>
+                    <option value="city">🇸🇬 Neon Marina Bay</option>
+                  </select>
+                  <select id="mp-opt-weather" class="mini-select" title="Meteo Stanza">
+                    <option value="dry" selected>☀️ Asciutto</option>
+                    <option value="overcast">⛅ Nuvoloso</option>
+                    <option value="rain">🌧️ Pioggia</option>
+                    <option value="dynamic">🌦️ Dinamico</option>
+                  </select>
+                  <select id="mp-opt-tod" class="mini-select" title="Orario Stanza">
+                    <option value="day" selected>☀️ Giorno</option>
+                    <option value="sunset">🌅 Tramonto</option>
+                    <option value="night">🌙 Notte</option>
+                  </select>
+                </div>
+                <label class="toggle-chip mp-bots-chip">
+                  <input type="checkbox" id="mp-fill-bots" checked />
+                  <span id="ui-mp-bots-lbl">🤖 Riempi griglia fino a 10 auto con Bot AI</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column: Connected Drivers Roster, Live Chat & Start GP -->
+          <div class="play-hub-right mp-col-right">
+            <div class="mp-roster-card">
+              <div class="mp-roster-header">
+                <span id="ui-mp-roster-title" class="setup-label">PILOTI NELLA STANZA</span>
+                <span id="mp-roster-count" class="mp-count-badge">0 / 10</span>
+              </div>
+              <div id="mp-status-pill" class="mp-status-bar">Crea una stanza o inserisci un codice per sfidare i tuoi amici.</div>
+              <div id="mp-roster-list" class="mp-roster-list"></div>
+
+              <!-- Live Lobby Chat -->
+              <div class="mp-chat-box">
+                <div id="mp-chat-list" class="mp-chat-list">
+                  <div class="mp-chat-msg"><strong style="color:#00e5ff">LOBBY:</strong> <span>Chat di stanza pronta.</span></div>
+                </div>
+                <div class="mp-chat-input-row">
+                  <input id="mp-chat-input" class="mp-text-input mp-chat-input" type="text" maxlength="140" placeholder="Scrivi in chat nella lobby... (Invio)" />
+                  <button id="btn-mp-chat-send" class="mp-share-btn accent-cyan" type="button">INVIA</button>
+                </div>
+              </div>
+            </div>
+
+            <button id="btn-mp-start-race" class="btn-primary-launch hidden" type="button">
+              <span id="ui-mp-start-btn">AVVIA SESSIONE ONLINE</span>
+              <span class="launch-arrow">▶</span>
+            </button>
+            <button id="btn-mp-toggle-ready" class="btn-secondary hidden" type="button">
+              ✓ PRONTO — IN ATTESA DELL'HOST
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
@@ -207,9 +422,14 @@
       <div id="leaderboard-list" class="leaderboard-list"></div>
     </div>
 
-    <!-- Top Center: FIA Flags, Start Lights, Banners & Team Radio -->
+    <!-- Top Center: Virtual Rearview Mirror, FIA Flags, Arcade Status, Start Lights, Banners & Team Radio -->
     <div class="hud-top-center">
+      <div id="rearview-mirror-wrap" class="rearview-mirror-wrap">
+        <canvas id="rearview-canvas" width="248" height="58"></canvas>
+        <span class="rearview-tag">SPECCHIETTO RETROVISORE</span>
+      </div>
       <div id="fia-flag-pill" class="fia-flag green">🟢 BANDIERA VERDE • PISTA LIBERA</div>
+      <div id="arcade-mode-pill" class="arcade-mode-pill hidden"></div>
       <div id="start-lights" class="start-lights hidden">
         <div class="light-pod" id="light-1"><span></span><span></span></div>
         <div class="light-pod" id="light-2"><span></span><span></span></div>
@@ -297,7 +517,7 @@
       </div>
     </div>
 
-    <!-- Bottom Right: Forza Horizon Minimalist Circular Analog/Digital Speedometer -->
+    <!-- Bottom Right: Forza Horizon Minimalist Circular Analog/Digital Speedometer + 3-Pedal Telemetry -->
     <div class="hud-telemetry">
       <div class="speedo-dial-wrap">
         <canvas id="speedo-dial-canvas" width="196" height="196"></canvas>
@@ -307,9 +527,10 @@
           <span id="hud-speed" class="speed-value">0</span>
           <span class="speed-unit">KM/H</span>
         </div>
-        <div class="pedals-block hidden">
+        <div class="pedals-block" title="Telemetria Pedali: Gas (Verde) • Freno (Rosso) • Frizione (Ciano)">
           <div class="pedal-track"><div id="bar-throttle" class="pedal-fill throttle"></div></div>
           <div class="pedal-track"><div id="bar-brake" class="pedal-fill brake"></div></div>
+          <div class="pedal-track"><div id="bar-clutch" class="pedal-fill clutch"></div></div>
         </div>
       </div>
 
@@ -328,7 +549,7 @@
   <div id="pause-modal" class="modal-backdrop hidden">
     <div class="modal-card">
       <h2 id="ui-pause-title">⏸ GARA IN PAUSA</h2>
-      <p id="ui-pause-sub" class="modal-sub">WASD Guida • SHIFT DRS • SPAZIO/B ERS • Q/E Cambio • P Pit-Stop • 1/2/3 Radio • H Halo • V Replay • C Camera • O Impostazioni</p>
+      <p id="ui-pause-sub" class="modal-sub">WASD Guida • SHIFT DRS • SPAZIO/B ERS • Q/E Cambio • X Frizione • G Sirena • P Pit-Stop • C Camera • O Impostazioni</p>
       <div class="modal-actions">
         <button id="btn-resume" class="btn-primary-launch">RIPRENDI GARA</button>
         <button id="btn-open-wiki-pause" class="btn-secondary">📖 WIKI &amp; GUIDA MECCANICHE F1</button>
@@ -378,7 +599,7 @@
         <button id="ui-set-tab1" class="set-tab active" data-tab="gfx">1. GRAFICA &amp; PBR</button>
         <button id="ui-set-tab2" class="set-tab" data-tab="cam">2. CAMERA &amp; ABITACOLO</button>
         <button id="ui-set-tab3" class="set-tab" data-tab="eng">3. INGEGNERIA AUTO</button>
-        <button id="ui-set-tab4" class="set-tab" data-tab="ctrl">4. COMANDI &amp; FFB</button>
+        <button id="ui-set-tab4" class="set-tab" data-tab="ctrl">4. VOLANTE, PEDALI &amp; CAMBIO</button>
         <button id="ui-set-tab5" class="set-tab" data-tab="fia">5. AUDIO, AI &amp; FIA</button>
       </div>
 
@@ -516,11 +737,11 @@
         </div>
       </div>
 
-      <!-- TAB 4: CONTROLS, FFB & ASSISTS -->
+      <!-- TAB 4: SIM-RACING PERIPHERALS (WHEEL, PEDALS, SHIFTER), FFB & ASSISTS -->
       <div class="set-pane hidden" id="set-pane-ctrl">
         <div class="set-grid">
           <label class="set-item">
-            <div class="set-label"><span id="ui-set-sens">Sensibilità Sterzo</span><strong id="lbl-set-sens">100%</strong></div>
+            <div class="set-label"><span id="ui-set-sens">Sensibilità Sterzo (Volante/Pad)</span><strong id="lbl-set-sens">100%</strong></div>
             <input type="range" id="set-sens" min="40" max="180" step="5" value="100" />
           </label>
           <label class="set-item">
@@ -532,33 +753,76 @@
             <input type="range" id="set-dz" min="0" max="25" step="1" value="3" />
           </label>
           <label class="set-item">
-            <div class="set-label"><span id="ui-set-ffb">Intensità Vibrazione / Force Feedback</span><strong id="lbl-set-ffb">100%</strong></div>
-            <input type="range" id="set-ffb" min="0" max="150" step="5" value="100" />
-          </label>
-          <label class="set-item">
-            <div class="set-label"><span id="ui-set-bassist">Assistenza Frenata (Brake Assist)</span></div>
-            <select id="set-bassist" class="mini-select">
-              <option value="off" selected>Off (Simulatore Puro)</option>
-              <option value="low">Bassa / Low</option>
-              <option value="high">Alta / High</option>
-            </select>
-          </label>
-          <label class="set-item">
-            <div class="set-label"><span id="ui-set-tclbl">Controllo Trazione (TC)</span></div>
-            <select id="set-tc-modal" class="mini-select">
-              <option value="off">TC: OFF (Pro)</option>
-              <option value="med" selected>TC: MED</option>
-              <option value="full">TC: FULL</option>
-            </select>
-          </label>
-          <label class="set-item">
-            <div class="set-label"><span id="ui-set-absgear">ABS, Cambio &amp; Traiettoria</span></div>
-            <div class="set-check-row">
-              <label><input type="checkbox" id="set-abs-modal" checked /> ABS</label>
-              <label><input type="checkbox" id="set-man-modal" /> <span id="ui-set-mangear">Cambio Manuale</span></label>
-              <label><input type="checkbox" id="set-line-modal" checked /> <span id="ui-set-line3d">Traiettoria 3D</span></label>
+            <div class="set-label"><span>Rotazione Volante &amp; Force Feedback</span><strong id="lbl-set-wheel-deg">900° • FFB <span id="lbl-set-ffb">100%</span></strong></div>
+            <div class="set-dual-range">
+              <input type="range" id="set-wheel-deg" min="180" max="1080" step="30" value="900" title="Gradi Rotazione Volante (180° - 1080°)" />
+              <input type="range" id="set-ffb" min="0" max="150" step="5" value="100" title="Intensità Force Feedback" />
             </div>
           </label>
+          <label class="set-item">
+            <div class="set-label"><span>Zona Morta Pedali &amp; Linearità Gas/Freno</span><strong id="lbl-set-pedals">DZ 2% • G 1.0 • F 1.2</strong></div>
+            <div class="set-dual-range">
+              <input type="range" id="set-pedal-dz" min="0" max="20" step="1" value="2" title="Zona Morta Pedali (%)" />
+              <input type="range" id="set-throt-lin" min="80" max="220" step="5" value="100" title="Linearità Acceleratore" />
+              <input type="range" id="set-brake-lin" min="80" max="220" step="5" value="120" title="Linearità Freno Load-Cell" />
+            </div>
+          </label>
+          <label class="set-item">
+            <div class="set-label"><span>Tipo Cambio Sim-Racing (Shifter)</span></div>
+            <select id="set-shifter-mode" class="mini-select">
+              <option value="paddles" selected>Palette al Volante (Paddle Shifters)</option>
+              <option value="sequential">Cambio Sequenziale (+/-)</option>
+              <option value="h_pattern">Cambio ad H (1ª–7ª + R / Tastierino)</option>
+            </select>
+          </label>
+          <label class="set-item">
+            <div class="set-label"><span>Inversione Assi Pedaliera / Volante</span></div>
+            <div class="set-check-row">
+              <label><input type="checkbox" id="set-inv-steer" /> Inv. Sterzo</label>
+              <label><input type="checkbox" id="set-inv-throt" /> Inv. Gas</label>
+              <label><input type="checkbox" id="set-inv-brake" /> Inv. Freno</label>
+              <label><input type="checkbox" id="set-inv-clutch" /> Inv. Frizione</label>
+            </div>
+          </label>
+          <label class="set-item">
+            <div class="set-label"><span id="ui-set-absgear">Assistenze Guida (ABS, TC, Cambio, Linea)</span></div>
+            <div class="set-check-row">
+              <label><input type="checkbox" id="set-abs-modal" checked /> ABS</label>
+              <label><input type="checkbox" id="set-man-modal" /> <span id="ui-set-mangear">Manuale</span></label>
+              <label><input type="checkbox" id="set-line-modal" checked /> <span id="ui-set-line3d">Linea 3D</span></label>
+              <select id="set-tc-modal" class="mini-select" style="max-width:92px">
+                <option value="off">TC: OFF</option>
+                <option value="med" selected>TC: MED</option>
+                <option value="full">TC: FULL</option>
+              </select>
+              <select id="set-bassist" class="mini-select" style="max-width:96px" title="Brake Assist">
+                <option value="off" selected>Freno: Puro</option>
+                <option value="low">Freno: Low</option>
+                <option value="high">Freno: High</option>
+              </select>
+            </div>
+          </label>
+
+          <!-- Hardware Wheel / Pedals Calibration & Live Telemetry Bar -->
+          <div class="set-item sim-cal-box" style="grid-column: 1 / -1">
+            <div class="set-label">
+              <span>🎯 Calibrazione Periferiche Sim-Racing (Gamepad API &amp; WebHID)</span>
+              <strong id="cal-status-lbl">Tastiera / Controller Attivo</strong>
+            </div>
+            <div class="sim-cal-actions">
+              <button type="button" id="btn-cal-webhid" class="mp-share-btn accent-cyan">🔌 Connetti Volante WebHID</button>
+              <button type="button" id="btn-cal-steer" class="mp-share-btn">🛞 Calibra Sterzo</button>
+              <button type="button" id="btn-cal-throt" class="mp-share-btn">🟢 Calibra Gas</button>
+              <button type="button" id="btn-cal-brake" class="mp-share-btn">🔴 Calibra Freno</button>
+              <button type="button" id="btn-cal-clutch" class="mp-share-btn">🔵 Calibra Frizione</button>
+            </div>
+            <div class="sim-cal-bars">
+              <div class="sim-bar-item"><span>STERZO</span><div class="sim-bar-track"><div id="cal-bar-steer" class="sim-bar-fill steer"></div></div></div>
+              <div class="sim-bar-item"><span>GAS</span><div class="sim-bar-track"><div id="cal-bar-throt" class="sim-bar-fill throt"></div></div></div>
+              <div class="sim-bar-item"><span>FRENO</span><div class="sim-bar-track"><div id="cal-bar-brake" class="sim-bar-fill brake"></div></div></div>
+              <div class="sim-bar-item"><span>FRIZIONE</span><div class="sim-bar-track"><div id="cal-bar-clutch" class="sim-bar-fill clutch"></div></div></div>
+            </div>
+          </div>
         </div>
       </div>
 

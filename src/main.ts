@@ -56,6 +56,11 @@ import { updateAIDriver } from './sim/ai';
 import { InputManager } from './sim/input';
 import { SoundEngine } from './audio/soundEngine';
 import { HUDController, formatTime } from './ui/hud';
+import {
+  MultiplayerRoomManager,
+  createDriverNametagSprite,
+  type MultiplayerRaceStartPacket
+} from './net/multiplayer';
 
 const LICENSE_STORAGE_KEY = 'apex_gp_3d_driver_license_v2';
 
@@ -118,6 +123,8 @@ export class ApexGPGame {
   private prevBestLap = Infinity;
   private sessionBest: SessionBestSectors = { sectors: [Infinity, Infinity, Infinity] };
   private impactShake = 0;
+  private knockoutTimer = 35;
+  private arcadeStatusText = '';
 
   // Camera scratch vectors
   private camPosSmooth = new THREE.Vector3();
@@ -137,6 +144,7 @@ export class ApexGPGame {
 
   private audio = new SoundEngine();
   private hud = new HUDController();
+  public multiplayer = new MultiplayerRoomManager();
   public input!: InputManager;
   private showroom!: ShowroomStage;
 
@@ -156,7 +164,13 @@ export class ApexGPGame {
       onReplay: () => { if (this.mode === 'RACE' && !this.paused && this.raceActive) this.toggleReplay(); },
       onErsMode: () => { this._cyclePlayerErsMode(); },
       onHaloToggle: () => { this._toggleVirtualHalo(); },
-      onRadioQuery: (topic) => { this._handleRadioQuery(topic); }
+      onRadioQuery: (topic) => { this._handleRadioQuery(topic); },
+      onSirenToggle: () => {
+        if (this.mode === 'RACE' && this.player) {
+          this.player.sirenActive = !this.player.sirenActive;
+          this.hud.showBanner(this.player.sirenActive ? '🚓 SIRENA POLIZIA: ATTIVA' : '🚓 SIRENA POLIZIA: SPENTA', 950);
+        }
+      }
     });
 
     this._setupUI();
@@ -164,7 +178,7 @@ export class ApexGPGame {
 
     this.hud.updateLicenseUI(this.driverStats);
     this.hud.applyLanguage(this.audio.muted, this.settings.mode);
-    this.showroom.setTeam(TEAMS[this.selectedTeamIdx], TIRE_COMPOUNDS[this.settings.compound].color);
+    this._refreshShowroomCar();
     this.showroom.setVisible(true, this.studioEnv);
     this.hud.showMenu();
 
@@ -179,12 +193,29 @@ export class ApexGPGame {
     this.assetsReady = fh6Assets.preloadAll(this.renderer).then(() => {
       this.studioEnv = createStudioEnvMap(this.renderer);
       if (this.mode === 'MENU') {
-        this.showroom.setTeam(TEAMS[this.selectedTeamIdx], TIRE_COMPOUNDS[this.settings.compound].color);
+        this._refreshShowroomCar();
         this.showroom.setVisible(true, this.studioEnv);
       }
       kickLoop();
     });
     window.setTimeout(kickLoop, 2500);
+  }
+
+  private _getShowroomCustomOpts() {
+    return {
+      customPaintColor: this.settings.customPaintColor,
+      customPaintFinish: this.settings.customPaintFinish,
+      customLiveryStyle: this.settings.customLiveryStyle,
+      customRimColor: this.settings.customRimColor
+    };
+  }
+
+  private _refreshShowroomCar(): void {
+    this.showroom.setTeam(
+      TEAMS[this.selectedTeamIdx],
+      TIRE_COMPOUNDS[this.settings.compound].color,
+      this._getShowroomCustomOpts()
+    );
   }
 
   private _loadDriverStats(): DriverProfileStats {
@@ -256,30 +287,136 @@ export class ApexGPGame {
       (idx) => {
         this.selectedTeamIdx = idx;
         this.hud.updateSelectedTeamUI(TEAMS[idx], idx);
-        this.showroom.setTeam(TEAMS[idx], TIRE_COMPOUNDS[this.settings.compound].color);
+        this._refreshShowroomCar();
+        this.multiplayer.setLocalLoadout(TEAMS[idx].id, this.settings.compound);
       },
       (idx) => {
         this.selectedTrackIdx = idx;
         this.hud.updateSelectedTrackUI(TRACKS[idx], idx);
+        this.multiplayer.updateHostRoomSettings({ trackId: TRACKS[idx].id });
       }
     );
 
-    // Left Main Navigation Dock: Switch between 3D Garage & Play Race Hub
+    // Garage Category Switcher: F1 (10 Scuderie) vs 12 Supercar/Hypercar vs Vernice & Tuning
+    const btnCatF1 = document.getElementById('btn-cat-f1');
+    const btnCatSuper = document.getElementById('btn-cat-supercars');
+    const btnCatCustom = document.getElementById('btn-cat-custom');
+    const garageMainPane = document.getElementById('garage-main-pane');
+    const garageCustomPane = document.getElementById('garage-custom-pane');
+
+    const switchGarageTab = (tab: 'f1' | 'supercar' | 'custom') => {
+      btnCatF1?.classList.toggle('active', tab === 'f1');
+      btnCatSuper?.classList.toggle('active', tab === 'supercar');
+      btnCatCustom?.classList.toggle('active', tab === 'custom');
+      garageMainPane?.classList.toggle('hidden', tab === 'custom');
+      garageCustomPane?.classList.toggle('hidden', tab !== 'custom');
+
+      if (tab === 'f1' || tab === 'supercar') {
+        this.hud.setGarageCategory(tab);
+        const curTeam = TEAMS[this.selectedTeamIdx];
+        const isSuper = Boolean(curTeam.vehicleCategory && curTeam.vehicleCategory !== 'f1');
+        if (tab === 'f1' && isSuper) {
+          this.selectedTeamIdx = 0;
+          this.hud.updateSelectedTeamUI(TEAMS[0], 0);
+          this._refreshShowroomCar();
+          this.multiplayer.setLocalLoadout(TEAMS[0].id, this.settings.compound);
+        } else if (tab === 'supercar' && !isSuper) {
+          const firstSuperIdx = TEAMS.findIndex((t) => t.vehicleCategory && t.vehicleCategory !== 'f1');
+          if (firstSuperIdx >= 0) {
+            this.selectedTeamIdx = firstSuperIdx;
+            this.hud.updateSelectedTeamUI(TEAMS[firstSuperIdx], firstSuperIdx);
+            this._refreshShowroomCar();
+            this.multiplayer.setLocalLoadout(TEAMS[firstSuperIdx].id, this.settings.compound);
+          }
+        }
+      }
+    };
+    btnCatF1?.addEventListener('click', () => switchGarageTab('f1'));
+    btnCatSuper?.addEventListener('click', () => switchGarageTab('supercar'));
+    btnCatCustom?.addEventListener('click', () => switchGarageTab('custom'));
+
+    // Aesthetic Paint, Finish, Livery, Rim Color & Quick Tuning bindings
+    const optPaintColor = document.getElementById('opt-paint-color') as HTMLInputElement | null;
+    optPaintColor?.addEventListener('input', () => {
+      this.settings.customPaintColor = optPaintColor.value;
+      this._refreshShowroomCar();
+    });
+    document.querySelectorAll('.paint-swatch-btn').forEach((swBtn) => {
+      swBtn.addEventListener('click', () => {
+        const col = (swBtn as HTMLElement).dataset.color || '';
+        this.settings.customPaintColor = col;
+        if (optPaintColor && col) optPaintColor.value = col;
+        this._refreshShowroomCar();
+      });
+    });
+    document.getElementById('btn-paint-reset')?.addEventListener('click', () => {
+      this.settings.customPaintColor = '';
+      this.settings.customPaintFinish = 'default';
+      this.settings.customLiveryStyle = 'stock';
+      this.settings.customRimColor = '';
+      const pf = document.getElementById('opt-paint-finish') as HTMLSelectElement | null;
+      const ls = document.getElementById('opt-livery-style') as HTMLSelectElement | null;
+      const rc = document.getElementById('opt-rim-color') as HTMLSelectElement | null;
+      if (pf) pf.value = 'default';
+      if (ls) ls.value = 'stock';
+      if (rc) rc.value = '';
+      this._refreshShowroomCar();
+    });
+    const optPaintFinish = document.getElementById('opt-paint-finish') as HTMLSelectElement | null;
+    optPaintFinish?.addEventListener('change', () => {
+      this.settings.customPaintFinish = optPaintFinish.value as GameSettings['customPaintFinish'];
+      this._refreshShowroomCar();
+    });
+    const optLiveryStyle = document.getElementById('opt-livery-style') as HTMLSelectElement | null;
+    optLiveryStyle?.addEventListener('change', () => {
+      this.settings.customLiveryStyle = optLiveryStyle.value as GameSettings['customLiveryStyle'];
+      this._refreshShowroomCar();
+    });
+    const optRimColor = document.getElementById('opt-rim-color') as HTMLSelectElement | null;
+    optRimColor?.addEventListener('change', () => {
+      this.settings.customRimColor = optRimColor.value;
+      this._refreshShowroomCar();
+    });
+    const optGearRatio = document.getElementById('opt-gear-ratio') as HTMLSelectElement | null;
+    optGearRatio?.addEventListener('change', () => {
+      this.settings.gearRatioPreset = optGearRatio.value as GameSettings['gearRatioPreset'];
+    });
+    const optQuickPsi = document.getElementById('opt-quick-psi') as HTMLInputElement | null;
+    const valQuickPsi = document.getElementById('val-quick-psi');
+    optQuickPsi?.addEventListener('input', () => {
+      this.settings.customTirePressurePsi = Number(optQuickPsi.value);
+      if (valQuickPsi) valQuickPsi.textContent = `${this.settings.customTirePressurePsi.toFixed(1)} PSI`;
+    });
+    const optDamageEnabled = document.getElementById('opt-damage-enabled') as HTMLInputElement | null;
+    optDamageEnabled?.addEventListener('change', () => {
+      this.settings.damageEnabled = optDamageEnabled.checked;
+    });
+
+    // Left Main Navigation Dock: Switch between 3D Garage, Play Race Hub & Multiplayer Room Hub
     const navPlayBtn = document.getElementById('nav-btn-play');
     const navGarageBtn = document.getElementById('nav-btn-garage');
+    const navMpBtn = document.getElementById('nav-btn-multiplayer');
     const viewGarage = document.getElementById('menu-view-garage');
     const viewPlay = document.getElementById('menu-view-play');
-    const setMenuTab = (tab: 'garage' | 'play') => {
+    const viewMp = document.getElementById('menu-view-multiplayer');
+    const setMenuTab = (tab: 'garage' | 'play' | 'multiplayer') => {
       navPlayBtn?.classList.toggle('active', tab === 'play');
       navGarageBtn?.classList.toggle('active', tab === 'garage');
+      navMpBtn?.classList.toggle('active', tab === 'multiplayer');
       viewGarage?.classList.toggle('hidden', tab !== 'garage');
       viewPlay?.classList.toggle('hidden', tab !== 'play');
+      viewMp?.classList.toggle('hidden', tab !== 'multiplayer');
       if (tab === 'play') {
         this.hud.updateSelectedTrackUI(TRACKS[this.selectedTrackIdx], this.selectedTrackIdx);
+      } else if (tab === 'multiplayer') {
+        this._renderMultiplayerLobbyUI();
       }
     };
     navPlayBtn?.addEventListener('click', () => setMenuTab('play'));
     navGarageBtn?.addEventListener('click', () => setMenuTab('garage'));
+    navMpBtn?.addEventListener('click', () => setMenuTab('multiplayer'));
+
+    this._setupMultiplayerUI(setMenuTab);
 
     // 2D Track Map & Real Satellite View Toggle in Play Hub
     document.getElementById('btn-map-vector')?.addEventListener('click', () => this.hud.setMapPreviewMode('vector'));
@@ -293,7 +430,8 @@ export class ApexGPGame {
         const comp = (btn as HTMLElement).dataset.compound as TireCompoundId;
         this.settings.compound = comp;
         document.querySelectorAll('#compound-pills .pill-btn').forEach((b) => b.classList.toggle('active', b === btn));
-        this.showroom.setTeam(TEAMS[this.selectedTeamIdx], TIRE_COMPOUNDS[comp].color);
+        this._refreshShowroomCar();
+        this.multiplayer.setLocalLoadout(TEAMS[this.selectedTeamIdx].id, comp);
       });
     });
 
@@ -304,7 +442,13 @@ export class ApexGPGame {
         document.querySelectorAll('#mode-tabs .mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
         const tr = this.hud.t();
         const laps = TRACKS[this.selectedTrackIdx].laps;
-        document.getElementById('meta-laps')!.textContent = m === 'weekend' ? tr.lapsWeekend : m === 'time_attack' ? tr.lapsFree : `${laps} ${tr.lapsUnit}`;
+        const metaLaps = document.getElementById('meta-laps')!;
+        if (m === 'weekend') metaLaps.textContent = tr.lapsWeekend;
+        else if (m === 'time_attack' || m === 'track_day') metaLaps.textContent = tr.lapsFree;
+        else if (m === 'knockout') metaLaps.textContent = 'Elim. 35s';
+        else if (m === 'cops_robbers') metaLaps.textContent = 'Caccia';
+        else if (m === 'infection') metaLaps.textContent = 'Virus ☣️';
+        else metaLaps.textContent = `${laps} ${tr.lapsUnit}`;
       });
     });
 
@@ -356,13 +500,17 @@ export class ApexGPGame {
     const optReverse = document.getElementById('opt-reverse') as HTMLInputElement;
     const optTc = document.getElementById('opt-tc') as HTMLSelectElement;
     const optWeather = document.getElementById('opt-weather') as HTMLSelectElement;
+    const optTodPreset = document.getElementById('opt-tod-preset') as HTMLSelectElement | null;
     const optDiff = document.getElementById('opt-difficulty') as HTMLSelectElement;
     const optQual = document.getElementById('opt-quality') as HTMLSelectElement;
 
     optAbs.addEventListener('change', () => { this.settings.abs = optAbs.checked; });
     optLine.addEventListener('change', () => { this.settings.racingLine = optLine.checked; });
     optManual.addEventListener('change', () => { this.settings.manualGearbox = optManual.checked; });
-    optReverse.addEventListener('change', () => { this.settings.reverseTrack = optReverse.checked; });
+    optReverse.addEventListener('change', () => {
+      this.settings.reverseTrack = optReverse.checked;
+      this.multiplayer.updateHostRoomSettings({ reverseTrack: optReverse.checked });
+    });
     optTc.addEventListener('change', () => { this.settings.tractionControl = optTc.value as 'off' | 'med' | 'full'; });
     optWeather.addEventListener('change', () => {
       this.settings.weather = optWeather.value as WeatherType;
@@ -371,8 +519,14 @@ export class ApexGPGame {
         document.querySelectorAll('#compound-pills .pill-btn').forEach((b) =>
           b.classList.toggle('active', (b as HTMLElement).dataset.compound === 'inter')
         );
-        this.showroom.setTeam(TEAMS[this.selectedTeamIdx], TIRE_COMPOUNDS.inter.color);
+        this._refreshShowroomCar();
+        this.multiplayer.setLocalLoadout(TEAMS[this.selectedTeamIdx].id, 'inter');
       }
+      this.multiplayer.updateHostRoomSettings({ weather: this.settings.weather });
+    });
+    optTodPreset?.addEventListener('change', () => {
+      this.settings.timeOfDay = optTodPreset.value as GameSettings['timeOfDay'];
+      this.multiplayer.updateHostRoomSettings({ timeOfDay: this.settings.timeOfDay });
     });
     optDiff.addEventListener('change', () => { this.settings.difficulty = optDiff.value as DifficultyId; });
     optQual.addEventListener('change', () => { this._applyQualityPreset(optQual.value as QualityPreset); });
@@ -593,11 +747,86 @@ export class ApexGPGame {
     setRide?.addEventListener('input', updateRidePsi);
     setPsi?.addEventListener('input', updateRidePsi);
 
-    // 4. Controls & Assists
+    // 4. Sim-Racing Peripherals (Wheel, Pedals, Shifter), FFB & Assists
     bindRange('set-sens', 'lbl-set-sens', (v) => `${v}%`, (v) => { this.settings.steerSensitivity = v; });
     bindRange('set-lin', 'lbl-set-lin', (v) => (v / 100).toFixed(2), (v) => { this.settings.steerLinearity = v; });
     bindRange('set-dz', 'lbl-set-dz', (v) => `${v}%`, (v) => { this.settings.steerDeadzone = v; });
-    bindRange('set-ffb', 'lbl-set-ffb', (v) => `${v}%`, (v) => { this.settings.ffbRumbleIntensity = v; });
+    const setWheelDeg = document.getElementById('set-wheel-deg') as HTMLInputElement | null;
+    const setFfb = document.getElementById('set-ffb') as HTMLInputElement | null;
+    const lblWheelDeg = document.getElementById('lbl-set-wheel-deg');
+    const updateWheelFfbLabel = () => {
+      if (setWheelDeg) this.settings.wheelRotationDeg = Number(setWheelDeg.value);
+      if (setFfb) this.settings.ffbRumbleIntensity = Number(setFfb.value);
+      if (lblWheelDeg) {
+        lblWheelDeg.innerHTML = `${this.settings.wheelRotationDeg}° • FFB <span id="lbl-set-ffb">${this.settings.ffbRumbleIntensity}%</span>`;
+      }
+    };
+    setWheelDeg?.addEventListener('input', updateWheelFfbLabel);
+    setFfb?.addEventListener('input', updateWheelFfbLabel);
+
+    const setPedalDz = document.getElementById('set-pedal-dz') as HTMLInputElement | null;
+    const setThrotLin = document.getElementById('set-throt-lin') as HTMLInputElement | null;
+    const setBrakeLin = document.getElementById('set-brake-lin') as HTMLInputElement | null;
+    const lblPedals = document.getElementById('lbl-set-pedals');
+    const updatePedalsSim = () => {
+      if (setPedalDz) this.settings.pedalDeadzone = Number(setPedalDz.value);
+      if (setThrotLin) this.settings.throttleLinearity = Number(setThrotLin.value);
+      if (setBrakeLin) this.settings.brakeLinearity = Number(setBrakeLin.value);
+      if (lblPedals) {
+        lblPedals.textContent = `DZ ${this.settings.pedalDeadzone ?? 2}% • G ${((this.settings.throttleLinearity ?? 100) / 100).toFixed(1)} • F ${((this.settings.brakeLinearity ?? 120) / 100).toFixed(1)}`;
+      }
+    };
+    setPedalDz?.addEventListener('input', updatePedalsSim);
+    setThrotLin?.addEventListener('input', updatePedalsSim);
+    setBrakeLin?.addEventListener('input', updatePedalsSim);
+
+    const setShifterMode = document.getElementById('set-shifter-mode') as HTMLSelectElement | null;
+    setShifterMode?.addEventListener('change', () => {
+      this.settings.shifterMode = setShifterMode.value as GameSettings['shifterMode'];
+      if (this.settings.shifterMode === 'h_pattern' || this.settings.shifterMode === 'sequential') {
+        this.settings.manualGearbox = true;
+        const optMan = document.getElementById('opt-manual') as HTMLInputElement | null;
+        const setMan = document.getElementById('set-man-modal') as HTMLInputElement | null;
+        if (optMan) optMan.checked = true;
+        if (setMan) setMan.checked = true;
+      }
+    });
+
+    const bindInvertCheck = (id: string, key: 'invertSteerAxis' | 'invertThrottleAxis' | 'invertBrakeAxis' | 'invertClutchAxis') => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      el?.addEventListener('change', () => {
+        this.settings[key] = el.checked;
+      });
+    };
+    bindInvertCheck('set-inv-steer', 'invertSteerAxis');
+    bindInvertCheck('set-inv-throt', 'invertThrottleAxis');
+    bindInvertCheck('set-inv-brake', 'invertBrakeAxis');
+    bindInvertCheck('set-inv-clutch', 'invertClutchAxis');
+
+    const calStatusLbl = document.getElementById('cal-status-lbl');
+    document.getElementById('btn-cal-webhid')?.addEventListener('click', async () => {
+      const ok = await this.input.requestWebHIDWheel();
+      if (calStatusLbl) {
+        calStatusLbl.textContent = ok
+          ? `✓ WebHID Connesso: ${this.input.gamepadName || 'Volante Sim-Racing'}`
+          : this.input.gamepadConnected
+          ? `✓ Gamepad API: ${this.input.gamepadName}`
+          : 'Usa Volante/Gamepad o premi un pulsante';
+      }
+    });
+    const bindAxisCalBtn = (btnId: string, target: 'steer' | 'throttle' | 'brake' | 'clutch', label: string) => {
+      document.getElementById(btnId)?.addEventListener('click', () => {
+        if (calStatusLbl) calStatusLbl.textContent = `⏳ Muovi ${label} sul volante/pedaliera...`;
+        this.input.startAxisCalibration(target, (axisIdx) => {
+          if (calStatusLbl) calStatusLbl.textContent = `✓ ${label} mappato su Asse #${axisIdx}!`;
+        });
+      });
+    };
+    bindAxisCalBtn('btn-cal-steer', 'steer', 'lo STERZO');
+    bindAxisCalBtn('btn-cal-throt', 'throttle', "l'ACCELERATORE");
+    bindAxisCalBtn('btn-cal-brake', 'brake', 'il FRENO');
+    bindAxisCalBtn('btn-cal-clutch', 'clutch', 'la FRIZIONE');
+
     const setBassist = document.getElementById('set-bassist') as HTMLSelectElement | null;
     setBassist?.addEventListener('change', () => {
       this.settings.brakeAssist = setBassist.value as GameSettings['brakeAssist'];
@@ -644,6 +873,7 @@ export class ApexGPGame {
       this.settings = { ...DEFAULT_SETTINGS, mode: this.settings.mode, compound: this.settings.compound };
       syncSlidersUI(DEFAULT_SETTINGS.customWingLoad, DEFAULT_SETTINGS.customBrakeBias, DEFAULT_SETTINGS.customSuspStiff);
       this._applyQualityPreset(this.settings.quality);
+      this._refreshShowroomCar();
       this.hud.showBanner(this.hud.t().bannerSettingsReset, 1300);
     });
   }
@@ -809,24 +1039,295 @@ export class ApexGPGame {
     }
   }
 
+  private _setupMultiplayerUI(setMenuTab: (tab: 'garage' | 'play' | 'multiplayer') => void): void {
+    const nameInput = document.getElementById('mp-driver-name') as HTMLInputElement | null;
+    const codeInput = document.getElementById('mp-join-code') as HTMLInputElement | null;
+    const fillBotsCheck = document.getElementById('mp-fill-bots') as HTMLInputElement | null;
+    const mpOptMode = document.getElementById('mp-opt-mode') as HTMLSelectElement | null;
+    const mpOptTrack = document.getElementById('mp-opt-track') as HTMLSelectElement | null;
+    const mpOptWeather = document.getElementById('mp-opt-weather') as HTMLSelectElement | null;
+    const mpOptTod = document.getElementById('mp-opt-tod') as HTMLSelectElement | null;
+    const mpChatInput = document.getElementById('mp-chat-input') as HTMLInputElement | null;
+
+    if (nameInput) {
+      nameInput.value = this.multiplayer.driverName;
+      nameInput.addEventListener('input', () => {
+        this.multiplayer.setDriverName(nameInput.value);
+      });
+    }
+
+    document.getElementById('btn-mp-create')?.addEventListener('click', () => {
+      this.audio.init();
+      const team = TEAMS[this.selectedTeamIdx];
+      const track = TRACKS[this.selectedTrackIdx];
+      this.multiplayer.createRoom(team.id, this.settings.compound, {
+        trackId: track.id,
+        weather: this.settings.weather,
+        timeOfDay: this.settings.timeOfDay,
+        mode: this.settings.mode === 'weekend' || this.settings.mode === 'championship' ? 'quick_race' : this.settings.mode,
+        reverseTrack: this.settings.reverseTrack,
+        fillWithBots: fillBotsCheck ? fillBotsCheck.checked : true
+      });
+    });
+
+    const joinAction = () => {
+      this.audio.init();
+      const raw = codeInput?.value || '';
+      const ok = this.multiplayer.joinRoom(raw, TEAMS[this.selectedTeamIdx].id, this.settings.compound);
+      if (!ok && codeInput) {
+        codeInput.focus();
+      }
+    };
+    document.getElementById('btn-mp-join')?.addEventListener('click', joinAction);
+    codeInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') joinAction();
+    });
+
+    document.getElementById('btn-mp-leave')?.addEventListener('click', () => {
+      this.multiplayer.leaveRoom();
+    });
+
+    document.getElementById('btn-mp-copy-code')?.addEventListener('click', () => {
+      if (!this.multiplayer.roomCode) return;
+      navigator.clipboard?.writeText(this.multiplayer.roomCode);
+      const btn = document.getElementById('btn-mp-copy-code');
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✓ CODICE COPIATO!';
+        window.setTimeout(() => { btn.textContent = orig; }, 1600);
+      }
+    });
+
+    document.getElementById('btn-mp-copy-link')?.addEventListener('click', () => {
+      if (!this.multiplayer.roomCode) return;
+      const url = this.multiplayer.getInviteUrl();
+      navigator.clipboard?.writeText(url);
+      const btn = document.getElementById('btn-mp-copy-link');
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✓ LINK INVITO COPIATO!';
+        window.setTimeout(() => { btn.textContent = orig; }, 1600);
+      }
+    });
+
+    mpOptMode?.addEventListener('change', () => {
+      this.multiplayer.updateHostRoomSettings({ mode: mpOptMode.value as GameMode });
+    });
+    mpOptTrack?.addEventListener('change', () => {
+      const idx = TRACKS.findIndex((t) => t.id === mpOptTrack.value);
+      if (idx >= 0) {
+        this.selectedTrackIdx = idx;
+        this.hud.updateSelectedTrackUI(TRACKS[idx], idx);
+      }
+      this.multiplayer.updateHostRoomSettings({ trackId: mpOptTrack.value });
+    });
+    mpOptWeather?.addEventListener('change', () => {
+      this.settings.weather = mpOptWeather.value as WeatherType;
+      this.multiplayer.updateHostRoomSettings({ weather: this.settings.weather });
+    });
+    mpOptTod?.addEventListener('change', () => {
+      this.settings.timeOfDay = mpOptTod.value as GameSettings['timeOfDay'];
+      this.multiplayer.updateHostRoomSettings({ timeOfDay: this.settings.timeOfDay });
+    });
+    fillBotsCheck?.addEventListener('change', () => {
+      this.multiplayer.updateHostRoomSettings({ fillWithBots: fillBotsCheck.checked });
+    });
+
+    const sendChat = () => {
+      if (!mpChatInput || !mpChatInput.value.trim()) return;
+      const team = TEAMS[this.selectedTeamIdx];
+      this.multiplayer.sendChatMessage(mpChatInput.value, team.accentColor || team.primaryColor);
+      mpChatInput.value = '';
+    };
+    document.getElementById('btn-mp-chat-send')?.addEventListener('click', sendChat);
+    mpChatInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendChat();
+    });
+
+    document.getElementById('btn-mp-start-race')?.addEventListener('click', () => {
+      this.audio.init();
+      this.multiplayer.startMultiplayerRace(TEAMS);
+    });
+
+    document.getElementById('btn-mp-toggle-ready')?.addEventListener('click', () => {
+      this.multiplayer.toggleReady();
+    });
+
+    this.multiplayer.onLobbyUpdated = () => {
+      this._renderMultiplayerLobbyUI();
+    };
+
+    this.multiplayer.onRaceStart = (pkt) => {
+      this.audio.init();
+      this.isQualifyingSession = false;
+      this.qualifiedGridSlot = null;
+      this.startRace(pkt);
+    };
+
+    // Auto-join Room if opened via shareable Invite Link (?room=APEX-XXXX)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const roomParam = params.get('room');
+      if (roomParam && roomParam.trim()) {
+        if (codeInput) codeInput.value = roomParam.trim().toUpperCase();
+        setMenuTab('multiplayer');
+        this.multiplayer.joinRoom(roomParam, TEAMS[this.selectedTeamIdx].id, this.settings.compound);
+      }
+    } catch {
+      // ignore URL parse error
+    }
+  }
+
+  private _renderMultiplayerLobbyUI(): void {
+    const mp = this.multiplayer;
+    const setupBox = document.getElementById('mp-setup-actions');
+    const activeBox = document.getElementById('mp-active-room-box');
+    const codeDisplay = document.getElementById('mp-room-code-display');
+    const trackLabel = document.getElementById('mp-room-track-label');
+    const fillBotsCheck = document.getElementById('mp-fill-bots') as HTMLInputElement | null;
+    const mpOptMode = document.getElementById('mp-opt-mode') as HTMLSelectElement | null;
+    const mpOptTrack = document.getElementById('mp-opt-track') as HTMLSelectElement | null;
+    const mpOptWeather = document.getElementById('mp-opt-weather') as HTMLSelectElement | null;
+    const mpOptTod = document.getElementById('mp-opt-tod') as HTMLSelectElement | null;
+    const chatList = document.getElementById('mp-chat-list');
+    const rosterCount = document.getElementById('mp-roster-count');
+    const statusPill = document.getElementById('mp-status-pill');
+    const rosterList = document.getElementById('mp-roster-list');
+    const btnStart = document.getElementById('btn-mp-start-race');
+    const btnReady = document.getElementById('btn-mp-toggle-ready');
+
+    setupBox?.classList.toggle('hidden', mp.isConnected);
+    activeBox?.classList.toggle('hidden', !mp.isConnected);
+
+    if (codeDisplay) codeDisplay.textContent = mp.roomCode || 'APEX-0000';
+
+    const trObj = TRACKS.find((t) => t.id === mp.roomSettings.trackId) || TRACKS[this.selectedTrackIdx];
+    const weatherMap: Record<WeatherType, string> = {
+      dry: '☀️ Asciutto',
+      overcast: '⛅ Nuvoloso',
+      rain: '🌧️ Pioggia',
+      dynamic: '🌦️ Dinamico'
+    };
+    const todMap: Record<string, string> = {
+      day: '☀️ Giorno',
+      sunset: '🌅 Tramonto',
+      night: '🌙 Notte'
+    };
+    const modeMap: Record<string, string> = {
+      quick_race: '🏁 Gara GP',
+      time_attack: '⏱️ Time Attack',
+      track_day: '🛞 Track Day',
+      knockout: '💀 Knockout',
+      team_race: '🔴🔵 Team Race',
+      cops_robbers: '🚓 Guardie & Ladri',
+      infection: '☣️ Infection'
+    };
+    if (trackLabel) {
+      const mLbl = modeMap[mp.roomSettings.mode || 'quick_race'] || '🏁 Gara GP';
+      const todLbl = todMap[mp.roomSettings.timeOfDay || 'day'] || '☀️ Giorno';
+      trackLabel.textContent = `${mLbl} • ${trObj.shortName} • ${weatherMap[mp.roomSettings.weather] || '☀️'} • ${todLbl}`;
+    }
+    if (mpOptMode) {
+      mpOptMode.value = mp.roomSettings.mode || 'quick_race';
+      mpOptMode.disabled = !mp.isHost;
+    }
+    if (mpOptTrack) {
+      mpOptTrack.value = mp.roomSettings.trackId;
+      mpOptTrack.disabled = !mp.isHost;
+    }
+    if (mpOptWeather) {
+      mpOptWeather.value = mp.roomSettings.weather;
+      mpOptWeather.disabled = !mp.isHost;
+    }
+    if (mpOptTod) {
+      mpOptTod.value = mp.roomSettings.timeOfDay || 'day';
+      mpOptTod.disabled = !mp.isHost;
+    }
+    if (fillBotsCheck) {
+      fillBotsCheck.checked = mp.roomSettings.fillWithBots;
+      fillBotsCheck.disabled = !mp.isHost;
+    }
+
+    if (chatList && mp.chatMessages.length > 0) {
+      chatList.innerHTML = mp.chatMessages
+        .map(
+          (c) =>
+            `<div class="mp-chat-msg"><small style="color:var(--text-muted)">[${c.time}]</small> <strong style="color:${c.color}">${c.sender}:</strong> <span>${c.text.replace(/</g, '&lt;')}</span></div>`
+        )
+        .join('');
+      chatList.scrollTop = chatList.scrollHeight;
+    }
+
+    if (rosterCount) rosterCount.textContent = `${mp.members.length} / 10`;
+    if (statusPill) {
+      statusPill.textContent = mp.isConnected
+        ? mp.statusText
+        : 'Crea una stanza o inserisci un codice / link invito per sfidare i tuoi amici in tempo reale.';
+    }
+
+    if (rosterList) {
+      if (!mp.isConnected || mp.members.length === 0) {
+        rosterList.innerHTML = `<div class="mp-member-row"><span class="mp-member-name" style="color:var(--text-muted)">Nessun pilota connesso</span></div>`;
+      } else {
+        rosterList.innerHTML = mp.members
+          .map((m) => {
+            const team = TEAMS.find((t) => t.id === m.teamId) || TEAMS[0];
+            const comp = TIRE_COMPOUNDS[m.compound] || TIRE_COMPOUNDS.soft;
+            const isMe = m.peerId === mp.localPeerId;
+            const roleBadge = m.isHost ? '👑 HOST' : m.ready ? '✓ PRONTO' : '⏳...';
+            return `
+              <div class="mp-member-row ${isMe ? 'is-me' : ''}">
+                <div class="mp-member-swatch" style="background:${team.primaryColor}"></div>
+                <span class="mp-member-tag" style="color:${team.secondaryColor === '#111111' ? '#fff' : team.secondaryColor}">${m.code}</span>
+                <span class="mp-member-name">${m.name}${isMe ? ' (TU)' : ''} • <small style="color:var(--text-muted)">${team.shortName}</small></span>
+                <span class="mp-member-tag" style="color:${comp.color};border:1px solid ${comp.color}">${comp.short}</span>
+                <span class="mp-member-ping">${m.pingMs}ms</span>
+                <span class="mp-member-tag">${roleBadge}</span>
+              </div>
+            `;
+          })
+          .join('');
+      }
+    }
+
+    if (btnStart && btnReady) {
+      btnStart.classList.toggle('hidden', !(mp.isConnected && mp.isHost));
+      btnReady.classList.toggle('hidden', !(mp.isConnected && !mp.isHost));
+    }
+  }
+
   public returnToShowroom(): void {
     this.audio.stopEngine();
     this._clearRaceScene();
     this.mode = 'MENU';
     this.paused = false;
     this.replayActive = false;
-    this.showroom.setTeam(TEAMS[this.selectedTeamIdx], TIRE_COMPOUNDS[this.settings.compound].color);
+    this._refreshShowroomCar();
     this.showroom.setVisible(true, this.studioEnv);
     this.hud.showMenu();
   }
 
-  public startRace(): void {
+  public startRace(mpStartPkt?: MultiplayerRaceStartPacket): void {
     this._clearRaceScene();
     this.showroom.setVisible(false);
 
+    if (mpStartPkt) {
+      const tIdx = TRACKS.findIndex((t) => t.id === mpStartPkt.settings.trackId);
+      if (tIdx >= 0) this.selectedTrackIdx = tIdx;
+      this.settings.weather = mpStartPkt.settings.weather;
+      this.settings.reverseTrack = mpStartPkt.settings.reverseTrack;
+      this.settings.mode = mpStartPkt.settings.mode || 'quick_race';
+      if (mpStartPkt.settings.timeOfDay) {
+        this.settings.timeOfDay = mpStartPkt.settings.timeOfDay;
+      }
+    }
+
     const trackCfg = TRACKS[this.selectedTrackIdx];
     const playerTeam = TEAMS[this.selectedTeamIdx];
-    this.settings.laps = trackCfg.laps;
+    this.settings.laps =
+      this.settings.mode === 'track_day' || this.settings.mode === 'knockout' || this.settings.mode === 'cops_robbers' || this.settings.mode === 'infection'
+        ? 99
+        : trackCfg.laps;
 
     this.track = buildTrack(
       trackCfg,
@@ -837,11 +1338,64 @@ export class ApexGPGame {
       this.settings.reverseTrack
     );
     this.track.racingLineMesh.visible = this.settings.racingLine;
+
+    // Apply Time-of-Day Lighting Preset (Day / Sunset / Night)
+    if (this.settings.timeOfDay === 'sunset') {
+      if (this.track.skyUniforms?.uSunDir) {
+        this.track.skyUniforms.uSunDir.value.set(0.75, 0.12, -0.58).normalize();
+      }
+      if (this.track.dirLight) {
+        this.track.dirLight.color.set('#ff9248');
+        this.track.dirLight.intensity = 2.65;
+      }
+      this.scene.fog = new THREE.FogExp2('#281b24', 0.0011);
+    } else if (this.settings.timeOfDay === 'night') {
+      if (this.track.skyUniforms?.uSunDir) {
+        this.track.skyUniforms.uSunDir.value.set(0.15, -0.45, -0.85).normalize();
+      }
+      if (this.track.dirLight) {
+        this.track.dirLight.color.set('#6da4ff');
+        this.track.dirLight.intensity = 1.25;
+      }
+      this.scene.background = new THREE.Color('#040710');
+      this.scene.fog = new THREE.FogExp2('#050914', 0.0012);
+    }
+
     const vfxWeather = this.settings.weather === 'dynamic' ? 'overcast' : this.settings.weather;
     this.vfx = new VFXManager(this.scene, vfxWeather);
 
-    const roster: Array<{ team: typeof playerTeam; number: number; code: string; isPlayer: boolean; compound: TireCompoundId }> = [];
-    if (this.settings.mode === 'time_attack') {
+    const roster: Array<{
+      team: typeof playerTeam;
+      number: number;
+      code: string;
+      isPlayer: boolean;
+      isRemotePlayer?: boolean;
+      remotePeerId?: string;
+      driverName?: string;
+      compound: TireCompoundId;
+    }> = [];
+
+    if (mpStartPkt && mpStartPkt.grid.length > 0) {
+      for (const g of mpStartPkt.grid) {
+        const tm = TEAMS.find((t) => t.id === g.teamId) || TEAMS[0];
+        const isLocalHuman = g.peerId === this.multiplayer.localPeerId;
+        const isRemoteHuman = g.peerId !== null && !isLocalHuman;
+        roster.push({
+          team: tm,
+          number: g.number,
+          code: g.code,
+          isPlayer: isLocalHuman,
+          isRemotePlayer: isRemoteHuman,
+          remotePeerId: g.peerId || undefined,
+          driverName: g.name,
+          compound: g.compound
+        });
+      }
+      if (!roster.some((r) => r.isPlayer)) {
+        roster[0].isPlayer = true;
+        roster[0].isRemotePlayer = false;
+      }
+    } else if (this.settings.mode === 'time_attack') {
       roster.push({
         team: playerTeam,
         number: playerTeam.number,
@@ -850,18 +1404,25 @@ export class ApexGPGame {
         compound: this.settings.compound
       });
     } else {
-      const otherTeams = TEAMS.filter((t) => t.id !== playerTeam.id);
+      // Match vehicle category or mix for Track Day / Arcade modes
+      const playerIsSupercar = Boolean(playerTeam.vehicleCategory && playerTeam.vehicleCategory !== 'f1');
+      const pool = this.settings.mode === 'track_day' || this.settings.mode === 'cops_robbers' || this.settings.mode === 'infection'
+        ? TEAMS.filter((t) => t.id !== playerTeam.id)
+        : TEAMS.filter((t) => t.id !== playerTeam.id && Boolean(t.vehicleCategory && t.vehicleCategory !== 'f1') === playerIsSupercar);
+      const otherTeams = pool.length >= 9 ? pool : TEAMS.filter((t) => t.id !== playerTeam.id);
+
       const aiCompounds: TireCompoundId[] = this.track.trackWetness > 0.45
         ? ['inter', 'wet', 'inter', 'inter']
         : ['soft', 'medium', 'soft', 'hard'];
-      const rivals = otherTeams.slice(0, 9).map((t, idx) => ({
+      const rivalCount = this.settings.mode === 'track_day' ? 5 : 9;
+      const rivals = otherTeams.slice(0, rivalCount).map((t, idx) => ({
         team: t,
         number: t.number,
         code: t.code,
         isPlayer: false,
         compound: aiCompounds[idx % aiCompounds.length]
       }));
-      const playerSlot = this.isQualifyingSession ? 0 : (this.qualifiedGridSlot ?? 4);
+      const playerSlot = this.isQualifyingSession ? 0 : Math.min(rivals.length, this.qualifiedGridSlot ?? 4);
       rivals.splice(playerSlot, 0, {
         team: playerTeam,
         number: playerTeam.number,
@@ -885,11 +1446,38 @@ export class ApexGPGame {
         settings: this.settings,
         isQualifying: this.isQualifyingSession
       });
+      state.isRemotePlayer = Boolean(entry.isRemotePlayer);
+      state.remotePeerId = entry.remotePeerId;
+      state.driverName = entry.driverName;
+
+      // Mode-specific role initialization
+      if (this.settings.mode === 'team_race') {
+        state.teamSquad = slot % 2 === 0 ? 'RED' : 'BLUE';
+      } else if (this.settings.mode === 'cops_robbers') {
+        const isCop = entry.isPlayer ? true : slot % 2 === 0;
+        state.copsRole = isCop ? 'COP' : 'ROBBER';
+        state.sirenActive = isCop;
+        state.robberHealth = 100;
+        state.robberArrested = false;
+      } else if (this.settings.mode === 'infection') {
+        state.infected = !entry.isPlayer && slot === 1;
+        state.survivalTimeSec = 0;
+      }
+
+      const customOpts = entry.isPlayer ? this._getShowroomCustomOpts() : {};
       const vis = buildF1Car(entry.team, {
         overrideNumber: entry.number,
         tireBandColor: TIRE_COMPOUNDS[entry.compound].color,
-        isPlayer: entry.isPlayer
+        isPlayer: entry.isPlayer,
+        ...customOpts
       });
+      if (entry.isRemotePlayer && entry.driverName) {
+        const tagSprite = createDriverNametagSprite(
+          entry.driverName,
+          entry.team.secondaryColor === '#111111' ? '#00e5ff' : entry.team.secondaryColor
+        );
+        vis.root.add(tagSprite);
+      }
       vis.root.position.copy(state.pos);
       vis.root.rotation.set(0, state.yaw, 0);
       this.scene.add(vis.root);
@@ -927,10 +1515,23 @@ export class ApexGPGame {
     this.sessionBest = { sectors: [Infinity, Infinity, Infinity] };
     this.raceFlag = 'GREEN';
     this.vscTimer = 0;
+    this.knockoutTimer = 35;
+    this.arcadeStatusText = '';
     this.cameraInitialized = false;
 
     const tr = this.hud.t();
-    const sessionLabel = this.isQualifyingSession ? tr.qualifyingTag : 'APEX GP';
+    const modeTagMap: Record<string, string> = {
+      track_day: 'TRACK DAY',
+      knockout: 'KNOCKOUT',
+      team_race: 'TEAM RACE',
+      cops_robbers: 'COPS & ROBBERS',
+      infection: 'INFECTION ☣️'
+    };
+    const sessionLabel = mpStartPkt
+      ? `MP • ${mpStartPkt.roomCode}`
+      : this.isQualifyingSession
+      ? tr.qualifyingTag
+      : modeTagMap[this.settings.mode] || 'APEX GP';
     this.hud.prepareRaceMinimap(this.track, this.cars.length, sessionLabel);
     this.hud.showRaceHUD();
     this.hud.setReplayBadge(false);
@@ -951,10 +1552,13 @@ export class ApexGPGame {
     if (launchPill && this.player) {
       launchPill.classList.remove('hidden');
       const rpm = Math.round(this.player.rpm);
-      if (rpm >= 9200 && rpm <= 12200) {
+      const maxRpm = this.player.team.physics.maxRpm || 15000;
+      const optLow = Math.round(maxRpm * 0.62);
+      const optHigh = Math.round(maxRpm * 0.82);
+      if (rpm >= optLow && rpm <= optHigh) {
         launchPill.textContent = tr.launchOptimal(rpm);
         launchPill.className = 'status-pill pit';
-      } else if (rpm > 12200) {
+      } else if (rpm > optHigh) {
         launchPill.textContent = tr.launchTooHigh(rpm);
         launchPill.className = 'status-pill offtrack';
       } else {
@@ -974,9 +1578,10 @@ export class ApexGPGame {
       launchPill?.classList.add('hidden');
       this.hud.setStartLights('GO', this.track.gantryLights);
       const rpm = this.player ? this.player.rpm : 5000;
-      const msg = rpm >= 9200 && rpm <= 12200
+      const maxRpm = this.player?.team.physics.maxRpm || 15000;
+      const msg = rpm >= maxRpm * 0.62 && rpm <= maxRpm * 0.82
         ? tr.launchPerfectBanner
-        : rpm > 12800
+        : rpm > maxRpm * 0.85
           ? tr.launchWheelspinBanner
           : tr.launchGoBanner;
       this.hud.showBanner(msg, 1600);
@@ -1001,14 +1606,16 @@ export class ApexGPGame {
       this.track.trackTempC = 32 - this.track.trackWetness * 10;
     }
 
-    // FIA Race Director Flag Evaluation (Yellow Flag / VSC on multi-car spin or stalled car) (Items 68, 70)
+    // FIA Race Director Flag Evaluation
     if (this.vscTimer > 0) {
       this.vscTimer = Math.max(0, this.vscTimer - dt);
       this.raceFlag = this.vscTimer > 0 ? 'VSC' : 'GREEN';
+    } else if (this.settings.mode === 'cops_robbers' || this.settings.mode === 'infection' || this.settings.mode === 'knockout') {
+      this.raceFlag = 'GREEN';
     } else {
       let hazard = false;
       for (const c of this.cars) {
-        if (!c.isPlayer && !c.inPit && this.raceClock > 6 && (c.speed < 6 || c.wrongWay)) {
+        if (!c.isPlayer && !c.inPit && !c.eliminated && this.raceClock > 6 && (c.speed < 6 || c.wrongWay)) {
           hazard = true;
           break;
         }
@@ -1021,31 +1628,116 @@ export class ApexGPGame {
       this.track.pitCrewGroup.visible = false;
     }
 
-    if (this.player.finished) {
-      updateAIDriver(this.player, this.track, this.cars, this.raceActive, this.raceClock, dt);
+    if (this.player.finished || this.player.eliminated || this.player.robberArrested) {
+      this.player.throttleInput = 0;
+      this.player.brakeInput = 1;
     } else {
-      this.input.applyToPlayer(this.player, dt);
+      this.input.applyToPlayer(this.player, dt, this.settings);
     }
 
     const vscActive = this.raceFlag === 'VSC';
     for (const car of this.cars) {
+      if (car.isRemotePlayer) {
+        this.multiplayer.stepRemoteCar(car, this.track, dt);
+        continue;
+      }
+      if (car.eliminated || car.robberArrested) {
+        car.throttleInput = 0;
+        car.brakeInput = 1;
+        car.speed *= Math.max(0, 1 - dt * 3.5);
+        continue;
+      }
       if (!car.isPlayer) {
         updateAIDriver(car, this.track, this.cars, this.raceActive, this.raceClock, dt);
       }
       stepCarPhysics(car, this.track, this.cars, this.raceActive, this.raceClock, this.settings, this.sessionBest, vscActive, dt);
     }
 
-    const dmgScale = this.settings.mode === 'time_attack' ? 0 : (this.settings.damageMult ?? 100) / 100;
+    const dmgScale =
+      this.settings.mode === 'time_attack' || this.settings.damageEnabled === false
+        ? 0
+        : (this.settings.damageMult ?? 100) / 100;
     const colEvents = resolveCarCollisions(this.cars, dmgScale);
+    if (this.multiplayer.isConnected) {
+      this.multiplayer.broadcastLocalTelemetry(this.player, this.raceClock);
+    }
     for (const ev of colEvents) {
       this.vfx?.emitCarCollisionVFX(ev);
+      if (ev.infectionSpread) {
+        this.audio.playRadioChime();
+        this.hud.showBanner('☣️ CONTAGIO! UN PILOTA È STATO INFETTATO!', 1500);
+      }
+      if (ev.robberBusted) {
+        this.audio.playRadioChime();
+        this.hud.showBanner('🚓 LADRO ARRESTATO DALLA POLIZIA!', 1600);
+      }
       if (ev.involvesPlayer) {
         this.audio.playImpact(ev.intensity);
         this.impactShake = Math.max(this.impactShake, ev.intensity);
         this.input.rumble(ev.intensity, ev.intensity * 0.75, 120);
-        if (ev.intensity > 0.42) {
+        if (ev.intensity > 0.42 && !ev.infectionSpread && !ev.robberBusted) {
           this.hud.showBanner(ev.type === 'rear_end' ? tr.bannerCollisionWing : tr.bannerCollisionRub, 1100);
         }
+      }
+    }
+
+    // Arcade & Special Game Modes Live Progression
+    this.arcadeStatusText = '';
+    if (this.raceActive && !this.finishShown) {
+      if (this.settings.mode === 'knockout') {
+        this.knockoutTimer -= dt;
+        const aliveCars = this._getSortedStandings().filter((c) => !c.eliminated);
+        const victim = aliveCars[aliveCars.length - 1];
+        this.arcadeStatusText = `💀 KNOCKOUT: ELIMINAZIONE ${victim ? victim.code : ''} TRA ${Math.max(1, Math.ceil(this.knockoutTimer))}s • IN GARA: ${aliveCars.length}`;
+        if (this.knockoutTimer <= 0 && aliveCars.length > 1) {
+          this.knockoutTimer = 32;
+          if (victim) {
+            victim.eliminated = true;
+            this.audio.playRadioChime();
+            this.hud.showBanner(`💀 ELIMINATO: #${victim.number} ${victim.code}!`, 1800);
+          }
+          const remaining = this.cars.filter((c) => !c.eliminated);
+          if (remaining.length <= 1 || this.player.eliminated) {
+            this.player.finished = true;
+            this.player.finishTime = this.raceClock;
+          }
+        }
+      } else if (this.settings.mode === 'team_race') {
+        const sortedNow = this._getSortedStandings();
+        let redPts = 0;
+        let bluePts = 0;
+        sortedNow.forEach((c, idx) => {
+          const pts = FIA_POINTS[idx] || 0;
+          if (c.teamSquad === 'RED') redPts += pts;
+          else bluePts += pts;
+        });
+        this.arcadeStatusText = `🔴 SQUADRA ROSSA: ${redPts} PT  •  🔵 SQUADRA BLU: ${bluePts} PT`;
+      } else if (this.settings.mode === 'cops_robbers') {
+        const activeRobbers = this.cars.filter((c) => c.copsRole === 'ROBBER' && !c.robberArrested);
+        const roleTxt = this.player.copsRole === 'COP' ? '🚓 SEI GUARDIA (SPERONA I LADRI)' : `💰 SEI LADRO (${Math.round(this.player.robberHealth ?? 100)}%)`;
+        this.arcadeStatusText = `${roleTxt} • LADRI IN FUGA: ${activeRobbers.length} • [G] SIRENA`;
+        if (activeRobbers.length === 0 || this.player.robberArrested) {
+          this.hud.showBanner(activeRobbers.length === 0 ? '🚓 TUTTI I LADRI ARRESTATI! VITTORIA POLIZIA!' : '🚨 SEI STATO ARRESTATO!', 2500);
+          this.player.finished = true;
+          this.player.finishTime = this.raceClock;
+        }
+      } else if (this.settings.mode === 'infection') {
+        let healthyCount = 0;
+        for (const c of this.cars) {
+          if (!c.infected) {
+            healthyCount++;
+            c.survivalTimeSec = (c.survivalTimeSec || 0) + dt;
+          }
+        }
+        const statusRole = this.player.infected ? '☣️ SEI INFETTO (CONTAGIA LE AUTO SANE!)' : '🛡️ SEI SANO (SFUGGI AGLI INFETTI!)';
+        this.arcadeStatusText = `${statusRole} • SANI RIMASTI: ${healthyCount}`;
+        if (healthyCount === 0) {
+          this.hud.showBanner('☣️ CONTAGIO TOTALE COMPLETATO!', 2400);
+          this.player.finished = true;
+          this.player.finishTime = this.raceClock;
+        }
+      } else if (this.settings.mode === 'track_day') {
+        this.arcadeStatusText = `🛞 TRACK DAY / FREE ROAM • ${TEAMS[this.selectedTeamIdx].shortName} (${TEAMS[this.selectedTeamIdx].physics.drivetrain || 'RWD'}) • GIRI LIBERI`;
       }
     }
 
@@ -1105,7 +1797,7 @@ export class ApexGPGame {
       this.currentLapGhost = [];
       this.currentLapTrace = [];
 
-      if (this.player.lap === this.player.maxLaps && this.settings.mode !== 'time_attack') {
+      if (this.player.lap === this.player.maxLaps && this.settings.mode !== 'time_attack' && this.settings.mode !== 'track_day') {
         this.hud.showBanner(tr.bannerFinalLap, 2200);
         this.audio.playRadioChime();
         this.hud.showRadio(tr.radioFinalLap);
@@ -1386,6 +2078,34 @@ export class ApexGPGame {
 
     document.getElementById('gamepad-pill')?.classList.toggle('hidden', !this.input.gamepadConnected);
 
+    // Update Sim-Racing Wheel / Pedals Calibration Telemetry Bars when Settings Modal is open
+    const settingsModal = document.getElementById('settings-modal');
+    if (settingsModal && !settingsModal.classList.contains('hidden')) {
+      if (this.mode === 'MENU' && this.player === null) {
+        // Poll hardware preview even while in Menu
+        const dummyCar = {
+          steerInput: 0,
+          throttleInput: 0,
+          brakeInput: 0,
+          clutchInput: 0,
+          drsRequested: false,
+          ersBoostRequested: false,
+          shiftUpReq: false,
+          shiftDownReq: false,
+          directGearReq: null
+        } as unknown as CarState;
+        this.input.applyToPlayer(dummyCar, rawDt, this.settings);
+      }
+      const bSteer = document.getElementById('cal-bar-steer');
+      const bThrot = document.getElementById('cal-bar-throt');
+      const bBrake = document.getElementById('cal-bar-brake');
+      const bClutch = document.getElementById('cal-bar-clutch');
+      if (bSteer) bSteer.style.width = `${Math.round(((this.input.liveSteer + 1) * 0.5) * 100)}%`;
+      if (bThrot) bThrot.style.width = `${Math.round(this.input.liveThrottle * 100)}%`;
+      if (bBrake) bBrake.style.width = `${Math.round(this.input.liveBrake * 100)}%`;
+      if (bClutch) bClutch.style.width = `${Math.round(this.input.liveClutch * 100)}%`;
+    }
+
     const bloomMult = (this.settings.bloomIntensity ?? 115) / 100;
     const vigMult = (this.settings.vignetteIntensity ?? 35) / 35;
 
@@ -1438,7 +2158,7 @@ export class ApexGPGame {
 
       // Dynamic Time-of-Day Sun Progression in GLSL Atmospheric Sky Shader (Item 24)
       const todSpeed = this.settings.timeOfDaySpeed ?? 3;
-      if (this.track.config.theme !== 'city' && this.raceActive && todSpeed > 0) {
+      if (this.track.config.theme !== 'city' && this.settings.timeOfDay === 'day' && this.raceActive && todSpeed > 0) {
         const baseSun = this.track.config.sunPos;
         const sunShift = Math.sin(this.raceClock * 0.004 * todSpeed) * 35;
         this.track.skyUniforms.uSunDir.value
@@ -1501,7 +2221,8 @@ export class ApexGPGame {
           CAMERA_MODES[this.cameraModeIdx],
           this.fpsSmooth,
           now,
-          this.settings
+          this.settings,
+          this.arcadeStatusText
         );
 
         this._updateAdaptiveGovernor(rawDt);

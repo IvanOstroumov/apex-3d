@@ -54,6 +54,10 @@ export class HUDController {
   private gearEl = document.getElementById('hud-gear')!;
   private throttleBarEl = document.getElementById('bar-throttle')!;
   private brakeBarEl = document.getElementById('bar-brake')!;
+  private clutchBarEl = document.getElementById('bar-clutch') as HTMLElement | null;
+  private arcadePillEl = document.getElementById('arcade-mode-pill') as HTMLElement | null;
+  private rearviewCanvas = document.getElementById('rearview-canvas') as HTMLCanvasElement | null;
+  private rearviewCtx = this.rearviewCanvas ? this.rearviewCanvas.getContext('2d') : null;
   private drsPctEl = document.getElementById('hud-drs-pct')!;
   private drsFillEl = document.getElementById('hud-drs-fill')!;
   private drsStatusEl = document.getElementById('hud-drs-status')!;
@@ -102,6 +106,7 @@ export class HUDController {
   private radioTimeout: number | null = null;
   private lastLbUpdate = 0;
 
+  public garageCategory: 'f1' | 'supercar' = 'f1';
   private cachedTeams: TeamConfig[] = [];
   private cachedTracks: TrackConfig[] = [];
   private cachedTeamIdx = 0;
@@ -402,6 +407,38 @@ export class HUDController {
     el.textContent = `${tr.licensePrefix} ${grade} (${Math.round(stats.safetyRating)}%) • ${Math.round(stats.skillRating)} SR • ${stats.wins}🏆`;
   }
 
+  public setGarageCategory(cat: 'f1' | 'supercar'): void {
+    this.garageCategory = cat;
+    this._renderTeamCards();
+  }
+
+  private _renderTeamCards(): void {
+    if (!this.cachedTeams.length || !this.cachedOnSelectTeam) return;
+    const tr = this.t();
+    this.teamListEl.innerHTML = '';
+    this.cachedTeams.forEach((team, idx) => {
+      const isSupercar = Boolean(team.vehicleCategory && team.vehicleCategory !== 'f1');
+      if (this.garageCategory === 'f1' && isSupercar) return;
+      if (this.garageCategory === 'supercar' && !isSupercar) return;
+
+      const tagline = tr.teamTaglines[team.id] || team.tagline;
+      const card = document.createElement('div');
+      card.className = 'team-card' + (idx === this.cachedTeamIdx ? ' active' : '');
+      card.dataset.teamIdx = String(idx);
+      card.style.setProperty('--team-color', team.secondaryColor === '#111111' ? team.primaryColor : team.secondaryColor);
+      card.innerHTML = `
+        <div class="team-swatch" style="background: linear-gradient(180deg, ${team.primaryColor}, ${team.secondaryColor})"></div>
+        <div class="team-info">
+          <strong>${team.name}</strong>
+          <small>${tagline}</small>
+        </div>
+        <span class="team-num">#${team.number}</span>
+      `;
+      card.addEventListener('click', () => this.cachedOnSelectTeam?.(idx));
+      this.teamListEl.appendChild(card);
+    });
+  }
+
   initMenu(
     teams: TeamConfig[],
     tracks: TrackConfig[],
@@ -418,23 +455,7 @@ export class HUDController {
     this.cachedOnSelectTrack = onSelectTrack;
 
     const tr = this.t();
-    this.teamListEl.innerHTML = '';
-    teams.forEach((team, idx) => {
-      const tagline = tr.teamTaglines[team.id] || team.tagline;
-      const card = document.createElement('div');
-      card.className = 'team-card' + (idx === selectedTeamIdx ? ' active' : '');
-      card.style.setProperty('--team-color', team.secondaryColor === '#111111' ? team.primaryColor : team.secondaryColor);
-      card.innerHTML = `
-        <div class="team-swatch" style="background: linear-gradient(180deg, ${team.primaryColor}, ${team.secondaryColor})"></div>
-        <div class="team-info">
-          <strong>${team.name}</strong>
-          <small>${tagline}</small>
-        </div>
-        <span class="team-num">#${team.number}</span>
-      `;
-      card.addEventListener('click', () => onSelectTeam(idx));
-      this.teamListEl.appendChild(card);
-    });
+    this._renderTeamCards();
 
     this.trackListEl.innerHTML = '';
     tracks.forEach((track, idx) => {
@@ -460,7 +481,10 @@ export class HUDController {
   updateSelectedTeamUI(team: TeamConfig, activeIdx: number): void {
     this.cachedTeamIdx = activeIdx;
     const tr = this.t();
-    Array.from(this.teamListEl.children).forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    Array.from(this.teamListEl.children).forEach((el) => {
+      const idxAttr = Number((el as HTMLElement).dataset.teamIdx);
+      el.classList.toggle('active', idxAttr === activeIdx);
+    });
     document.getElementById('spec-number')!.textContent = `#${team.number}`;
     document.getElementById('spec-team-name')!.textContent = team.name;
     document.getElementById('spec-tagline')!.textContent = tr.teamTaglines[team.id] || team.tagline;
@@ -702,7 +726,8 @@ export class HUDController {
     camMode: string,
     fps: number,
     nowMs: number,
-    settings: GameSettings
+    settings: GameSettings,
+    arcadeStatusText = ''
   ): void {
     const tr = this.t();
     const kmh = Math.max(0, Math.round(Math.abs(player.speed) * 3.6));
@@ -711,8 +736,22 @@ export class HUDController {
 
     this.throttleBarEl.style.height = `${Math.round(player.throttleInput * 100)}%`;
     this.brakeBarEl.style.height = `${Math.round(player.brakeInput * 100)}%`;
+    if (this.clutchBarEl) {
+      this.clutchBarEl.style.height = `${Math.round((player.clutchInput || 0) * 100)}%`;
+    }
 
-    const rpmFrac = THREE.MathUtils.clamp((player.rpm - 5500) / 9300, 0, 1);
+    if (this.arcadePillEl) {
+      if (arcadeStatusText) {
+        this.arcadePillEl.textContent = arcadeStatusText;
+        this.arcadePillEl.classList.remove('hidden');
+      } else {
+        this.arcadePillEl.classList.add('hidden');
+      }
+    }
+
+    const maxRpm = player.team.physics.maxRpm || 15000;
+    const minLedRpm = maxRpm * 0.36;
+    const rpmFrac = THREE.MathUtils.clamp((player.rpm - minLedRpm) / Math.max(1000, maxRpm - minLedRpm), 0, 1);
     const litLeds = Math.round(rpmFrac * 15);
     const redlineFlash = rpmFrac > 0.94 && Math.floor(nowMs / 65) % 2 === 0;
     for (let i = 0; i < 15; i++) {
@@ -764,7 +803,7 @@ export class HUDController {
     this.posEl.textContent = String(playerPos);
     this.lapPillEl.textContent = isQualifying
       ? tr.qualifyingTag
-      : settings.mode === 'time_attack'
+      : settings.mode === 'time_attack' || settings.mode === 'track_day'
       ? `${tr.lapWord} ${player.lap}`
       : `${tr.lapWord} ${Math.min(player.lap, player.maxLaps)} / ${player.maxLaps}`;
     this.lapTimeEl.textContent = formatTime(player.currentLapTime);
@@ -814,16 +853,27 @@ export class HUDController {
       sortedCars.forEach((c, idx) => {
         const gapMeters = Math.max(0, leaderDist - c.raceDistance);
         const gapSec = (gapMeters / Math.max(35, c.speed || 55)).toFixed(1);
-        const gapLabel = idx === 0 ? 'LEAD' : c.inPit ? 'PIT' : c.finished ? 'FIN' : `+${gapSec}`;
-        const barColor = c.team.id === 'monster' ? '#39ff14'
+        let gapLabel = idx === 0 ? 'LEAD' : c.inPit ? 'PIT' : c.finished ? 'FIN' : `+${gapSec}`;
+        if (settings.mode === 'knockout' && c.eliminated) gapLabel = '💀 OUT';
+        else if (settings.mode === 'cops_robbers') {
+          gapLabel = c.copsRole === 'COP' ? '🚓 COP' : c.robberArrested ? '🚨 BUST' : `💰${Math.round(c.robberHealth ?? 100)}%`;
+        } else if (settings.mode === 'infection') {
+          gapLabel = c.infected ? '☣️ INF' : '🛡️ OK';
+        }
+        const squadPrefix = settings.mode === 'team_race' ? (c.teamSquad === 'RED' ? '🔴 ' : '🔵 ') : '';
+        const barColor = settings.mode === 'team_race'
+          ? (c.teamSquad === 'RED' ? '#ff2424' : '#0088ff')
+          : settings.mode === 'infection' && c.infected
+          ? '#39ff14'
+          : c.team.id === 'monster' ? '#39ff14'
           : c.team.id === 'mercedes' ? '#00d2be'
           : c.team.primaryColor;
         const cSpec = TIRE_COMPOUNDS[c.compound];
         html += `
-          <div class="lb-row ${c.isPlayer ? 'is-player' : ''}">
+          <div class="lb-row ${c.isPlayer ? 'is-player' : ''}" style="${c.eliminated || c.robberArrested ? 'opacity:0.45' : ''}">
             <span class="lb-pos">${idx + 1}</span>
             <span class="lb-color" style="background:${barColor}"></span>
-            <span class="lb-code">${c.code}</span>
+            <span class="lb-code">${squadPrefix}${c.code}</span>
             <span class="lb-comp" style="color:${cSpec.color}">${cSpec.short}</span>
             <span class="lb-gap">${gapLabel}</span>
           </div>
@@ -835,6 +885,129 @@ export class HUDController {
     this._renderProximityRadar(player, sortedCars);
     this._renderMinimap(sortedCars);
     this._renderCircularSpeedo(player);
+    this._renderRearviewMirror(player, sortedCars, track, nowMs);
+  }
+
+  private _renderRearviewMirror(player: CarState, cars: CarState[], track: TrackData, nowMs: number): void {
+    const ctx = this.rearviewCtx;
+    const canvas = this.rearviewCanvas;
+    if (!ctx || !canvas) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w * 0.5;
+    const horizonY = Math.round(h * 0.36);
+
+    ctx.clearRect(0, 0, w, h);
+
+    // 1. Sky & Horizon Gradient (reflects Track Theme / Wetness)
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY);
+    if (track.config.theme === 'city') {
+      skyGrad.addColorStop(0, '#050814');
+      skyGrad.addColorStop(1, '#13223d');
+    } else if (track.config.theme === 'desert') {
+      skyGrad.addColorStop(0, '#4a2f22');
+      skyGrad.addColorStop(1, '#c67d47');
+    } else {
+      skyGrad.addColorStop(0, '#1d3658');
+      skyGrad.addColorStop(1, '#5882b4');
+    }
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, w, horizonY);
+
+    // 2. Ground & Asphalt Road Perspective behind Player
+    ctx.fillStyle = track.config.theme === 'desert' ? '#58412b' : '#182b1c';
+    ctx.fillRect(0, horizonY, w, h - horizonY);
+
+    const curveHint = THREE.MathUtils.clamp(player.steerInput * 28, -24, 24);
+    ctx.beginPath();
+    ctx.moveTo(cx - 24 + curveHint, horizonY);
+    ctx.lineTo(cx + 24 + curveHint, horizonY);
+    ctx.lineTo(w + 18, h);
+    ctx.lineTo(-18, h);
+    ctx.closePath();
+    ctx.fillStyle = '#202630';
+    ctx.fill();
+
+    // Red/White Curb Edges
+    ctx.strokeStyle = '#e10600';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 24 + curveHint, horizonY);
+    ctx.lineTo(-14, h);
+    ctx.moveTo(cx + 24 + curveHint, horizonY);
+    ctx.lineTo(w + 14, h);
+    ctx.stroke();
+
+    // Rear Wing Silhouette in top corners of mirror
+    ctx.fillStyle = player.team.primaryColor || '#11151c';
+    ctx.fillRect(0, 0, w, 3);
+
+    // 3. Project Rear-Approaching Cars in 3D Perspective
+    const sinY = Math.sin(player.yaw);
+    const cosY = Math.cos(player.yaw);
+    const fwdX = sinY, fwdZ = cosY;
+    const rightX = -cosY, rightZ = sinY;
+
+    const rearCars: Array<{ car: CarState; backDist: number; lat: number }> = [];
+    for (const c of cars) {
+      if (c === player) continue;
+      const dx = c.pos.x - player.pos.x;
+      const dz = c.pos.z - player.pos.z;
+      const fwdDist = dx * fwdX + dz * fwdZ; // negative = behind player
+      if (fwdDist < -1.5 && fwdDist > -110) {
+        const lat = dx * rightX + dz * rightZ; // positive = to player's right (in mirror, flipped horizontally)
+        rearCars.push({ car: c, backDist: -fwdDist, lat });
+      }
+    }
+
+    // Sort far-to-near (painter's algorithm)
+    rearCars.sort((a, b) => b.backDist - a.backDist);
+
+    for (const rc of rearCars) {
+      const depthNorm = THREE.MathUtils.clamp(1 - rc.backDist / 110, 0.12, 1);
+      const persp = 14 / Math.max(3.5, rc.backDist);
+      // In a rearview mirror, right side of car is on right side of mirror (-lat or +lat depending on right vector)
+      const screenX = cx - rc.lat * persp * 26 + curveHint * (1 - depthNorm);
+      const screenY = horizonY + 4 + Math.pow(depthNorm, 1.35) * (h - horizonY - 8);
+      const carW = THREE.MathUtils.clamp(persp * 64, 7, 68);
+      const carH = THREE.MathUtils.clamp(carW * 0.42, 4, 26);
+
+      // Shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(screenX - carW * 0.52, screenY + carH * 0.36, carW * 1.04, carH * 0.24);
+
+      // Tires
+      ctx.fillStyle = '#0c0e12';
+      const tw = Math.max(2, carW * 0.18);
+      ctx.fillRect(screenX - carW * 0.5, screenY - carH * 0.35, tw, carH * 0.85);
+      ctx.fillRect(screenX + carW * 0.5 - tw, screenY - carH * 0.35, tw, carH * 0.85);
+
+      // Body
+      ctx.fillStyle = rc.car.infected ? '#39ff14' : rc.car.team.primaryColor;
+      ctx.fillRect(screenX - carW * 0.34, screenY - carH * 0.45, carW * 0.68, carH * 0.82);
+
+      // Headlights
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(screenX - carW * 0.3, screenY - carH * 0.08, Math.max(1.5, carW * 0.12), Math.max(1.5, carH * 0.2));
+      ctx.fillRect(screenX + carW * 0.18, screenY - carH * 0.08, Math.max(1.5, carW * 0.12), Math.max(1.5, carH * 0.2));
+
+      // Police Flashing Lightbar in mirror!
+      if (rc.car.copsRole === 'COP') {
+        const flashPhase = Math.floor(nowMs / 110) % 2 === 0;
+        ctx.fillStyle = flashPhase ? '#ff1818' : '#0066ff';
+        ctx.fillRect(screenX - carW * 0.22, screenY - carH * 0.65, carW * 0.22, Math.max(2, carH * 0.18));
+        ctx.fillStyle = flashPhase ? '#0066ff' : '#ff1818';
+        ctx.fillRect(screenX, screenY - carH * 0.65, carW * 0.22, Math.max(2, carH * 0.18));
+      }
+
+      // Driver Tag & Distance if close (< 45m)
+      if (rc.backDist < 45) {
+        ctx.font = '900 8px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${rc.car.code} ${Math.round(rc.backDist)}m`, screenX, Math.max(9, screenY - carH * 0.68));
+      }
+    }
   }
 
   private _renderCircularSpeedo(player: CarState): void {
@@ -867,7 +1040,9 @@ export class HUDController {
     ctx.lineWidth = 6.5;
     ctx.stroke();
 
-    const rpmNorm = THREE.MathUtils.clamp((player.rpm - 3800) / 11200, 0, 1);
+    const maxRpm = player.team.physics.maxRpm || 15000;
+    const minDialRpm = maxRpm > 11000 ? 3800 : 1000;
+    const rpmNorm = THREE.MathUtils.clamp((player.rpm - minDialRpm) / Math.max(2000, maxRpm - minDialRpm), 0, 1);
     const needleAng = startAng + totalSweep * rpmNorm;
 
     if (rpmNorm > 0.01) {
@@ -886,6 +1061,7 @@ export class HUDController {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const nMajor = 10;
+    const maxDialNum = Math.round(maxRpm / 1000);
     for (let i = 0; i <= nMajor * 2; i++) {
       const f = i / (nMajor * 2);
       const a = startAng + totalSweep * f;
@@ -903,7 +1079,7 @@ export class HUDController {
         const tx = cx + Math.cos(a) * 59;
         const ty = cy + Math.sin(a) * 59;
         ctx.fillStyle = f >= 0.8 ? '#ff556e' : 'rgba(255,255,255,0.65)';
-        ctx.fillText(String(Math.round(f * 15)), tx, ty);
+        ctx.fillText(String(Math.round(f * maxDialNum)), tx, ty);
       }
     }
 

@@ -9,7 +9,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import type { CarState, TeamConfig } from '../core/types';
+import type { CarState, LiveryStyleType, PaintFinishType, TeamConfig } from '../core/types';
 import { ERS_MODE_SPECS } from '../core/config';
 import { getCarbonNormalTexture, getCarbonTexture, getTeamTextures } from './textures';
 import { markShared } from '../core/disposer';
@@ -33,6 +33,10 @@ export interface F1CarVisual {
   exhaustCone: THREE.Mesh;
   sidewallMat: THREE.MeshStandardMaterial;
   wheelBlurMat: THREE.MeshBasicMaterial;
+  policeLightbarGroup?: THREE.Group;
+  policeRedMat?: THREE.MeshStandardMaterial;
+  policeBlueMat?: THREE.MeshStandardMaterial;
+  infectionAuraMesh?: THREE.Mesh;
   lastOledUpdate: number;
 }
 
@@ -1316,11 +1320,53 @@ function getWheelSpinBlurTexture(): THREE.CanvasTexture {
   return tex;
 }
 
+export interface BuildCarOptions {
+  overrideNumber?: number | null;
+  tireBandColor?: string;
+  isPlayer?: boolean;
+  isGhost?: boolean;
+  forceHeroLod?: boolean;
+  customPaintColor?: string;
+  customPaintFinish?: PaintFinishType;
+  customLiveryStyle?: LiveryStyleType;
+  customRimColor?: string;
+}
+
 export function buildF1Car(
-  team: TeamConfig,
-  options: { overrideNumber?: number | null; tireBandColor?: string; isPlayer?: boolean; isGhost?: boolean; forceHeroLod?: boolean } = {}
+  baseTeam: TeamConfig,
+  options: BuildCarOptions = {}
 ): F1CarVisual {
-  const { overrideNumber = null, tireBandColor, isPlayer = false, isGhost = false, forceHeroLod = false } = options;
+  const {
+    overrideNumber = null,
+    tireBandColor,
+    isPlayer = false,
+    isGhost = false,
+    forceHeroLod = false,
+    customPaintColor = '',
+    customPaintFinish = 'default',
+    customLiveryStyle = 'stock',
+    customRimColor = ''
+  } = options;
+
+  // Apply custom paint color & finish overrides without mutating global config
+  const team: TeamConfig = {
+    ...baseTeam,
+    primaryColor: customPaintColor && customPaintColor.startsWith('#') ? customPaintColor : baseTeam.primaryColor,
+    metalness: customPaintFinish === 'chrome' ? 0.98
+      : customPaintFinish === 'metallic' ? 0.78
+      : customPaintFinish === 'matte' ? 0.22
+      : customPaintFinish === 'pearl' ? 0.52
+      : baseTeam.metalness,
+    roughness: customPaintFinish === 'chrome' ? 0.04
+      : customPaintFinish === 'metallic' ? 0.14
+      : customPaintFinish === 'matte' ? 0.62
+      : customPaintFinish === 'pearl' ? 0.08
+      : baseTeam.roughness,
+    clearcoat: customPaintFinish === 'matte' ? 0.04 : 1.0
+  };
+
+  const isRoadSupercar = Boolean(team.vehicleCategory && team.vehicleCategory !== 'f1');
+
   const root = new THREE.Group();
   const bodyGroup = new THREE.Group();
   root.add(bodyGroup);
@@ -1337,14 +1383,13 @@ export function buildF1Car(
       })
     : null;
 
-  // ForzaTech Multi-Layer Metallic Flake + Iridescent Clear-Coat Car Paint Shader (Poly Haven .HDR reflections!)
   const paintMat = ghostMat || new THREE.MeshPhysicalMaterial({
     map: bodyTex,
-    metalness: Math.max(0.38, team.metalness),
-    roughness: Math.max(0.055, team.roughness * 0.62),
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.02,
-    iridescence: 0.08,
+    metalness: team.metalness,
+    roughness: Math.max(0.04, team.roughness * (customPaintFinish === 'matte' ? 1.0 : 0.62)),
+    clearcoat: team.clearcoat,
+    clearcoatRoughness: customPaintFinish === 'matte' ? 0.45 : 0.02,
+    iridescence: customPaintFinish === 'pearl' ? 0.35 : 0.08,
     iridescenceIOR: 1.38,
     reflectivity: 1.0,
     envMapIntensity: 2.05
@@ -1352,11 +1397,11 @@ export function buildF1Car(
 
   const solidPaintMat = ghostMat || new THREE.MeshPhysicalMaterial({
     color: team.primaryColor,
-    metalness: Math.max(0.38, team.metalness),
-    roughness: Math.max(0.055, team.roughness * 0.62),
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.02,
-    iridescence: 0.08,
+    metalness: team.metalness,
+    roughness: Math.max(0.04, team.roughness * (customPaintFinish === 'matte' ? 1.0 : 0.62)),
+    clearcoat: team.clearcoat,
+    clearcoatRoughness: customPaintFinish === 'matte' ? 0.45 : 0.02,
+    iridescence: customPaintFinish === 'pearl' ? 0.35 : 0.08,
     iridescenceIOR: 1.38,
     reflectivity: 1.0,
     envMapIntensity: 2.05
@@ -1441,13 +1486,142 @@ export function buildF1Car(
   const drsFlapGroup = new THREE.Group();
   drsFlapGroup.position.set(0, 0.955, -2.35);
 
-  if (useGlb) {
+  if (isRoadSupercar) {
+    // =========================================================================
+    // CLOSED-COCKPIT 3D SUPERCAR / HYPERCAR / GT / MUSCLE CAR BUILDER
+    // =========================================================================
+    haloMesh = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), ghostMat || shared.carbonMat);
+    haloMesh.visible = false;
+    bodyGroup.add(haloMesh);
+
+    const cabinGlassMat = ghostMat || new THREE.MeshPhysicalMaterial({
+      color: '#0b1320',
+      metalness: 0.15,
+      roughness: 0.05,
+      transmission: 0.45,
+      transparent: true,
+      opacity: 0.42,
+      envMapIntensity: 2.2
+    });
+    const headlightMat = ghostMat || new THREE.MeshStandardMaterial({
+      color: '#ffffff',
+      emissive: '#dff4ff',
+      emissiveIntensity: 3.2,
+      toneMapped: false
+    });
+
+    if (fh6Assets.safetyCarPremerged) {
+      const scGroup = new THREE.Group();
+      // Proportion morphing per body style (Hypercar low & wide, Muscle tall & long, Mid-wedge sleek)
+      if (team.bodyStyle === 'hyper_fin') {
+        scGroup.scale.set(1.04, 0.92, 1.04);
+      } else if (team.bodyStyle === 'mid_wedge') {
+        scGroup.scale.set(1.02, 0.95, 1.01);
+      } else if (team.bodyStyle === 'muscle_fastback') {
+        scGroup.scale.set(1.00, 1.04, 1.03);
+      }
+      const scMatMap: Record<string, THREE.Material> = {
+        SC_Body_Paint: solidPaintMat,
+        SC_Cabin_Glass: cabinGlassMat,
+        SC_Carbon: ghostMat || shared.carbonMat,
+        SC_Chrome: ghostMat || shared.titaniumExhaustMat,
+        SC_Headlight: headlightMat,
+        SC_Taillight: rainLightMat,
+      };
+      for (const [mName, geo] of Object.entries(fh6Assets.safetyCarPremerged.byMat)) {
+        if (mName === 'SC_Tire' || mName === 'SC_Plate') continue;
+        const mesh = new THREE.Mesh(geo, scMatMap[mName] || (ghostMat || shared.carbonMat));
+        mesh.castShadow = !isGhost && (mName === 'SC_Body_Paint' || mName === 'SC_Cabin_Glass' || mName === 'SC_Carbon');
+        mesh.receiveShadow = !isGhost;
+        scGroup.add(mesh);
+      }
+      bodyGroup.add(scGroup);
+    } else {
+      // Fallback procedural closed-cockpit supercar hull if before async .glb preload
+      const hullMesh = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.62, 4.45), solidPaintMat);
+      hullMesh.position.set(0, 0.44, 0);
+      hullMesh.castShadow = !isGhost;
+      bodyGroup.add(hullMesh);
+      const cabinMesh = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.44, 2.05), cabinGlassMat);
+      cabinMesh.position.set(0, 0.92, -0.15);
+      bodyGroup.add(cabinMesh);
+    }
+
+    // Vehicle-Specific 3D Aero & Body Styling Kit
+    if (team.bodyStyle === 'hyper_fin') {
+      // Dorsal LMP1 Shark Fin + Roof Intake Scoop (Bugatti Chiron, Koenigsegg Jesko, Huracán STO)
+      const dorsalFin = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.34, 1.48), ghostMat || shared.carbonMat);
+      dorsalFin.position.set(0, 1.08, -1.25);
+      bodyGroup.add(dorsalFin);
+      const roofScoop = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.14, 0.62), accentMat);
+      roofScoop.position.set(0, 1.24, -0.25);
+      bodyGroup.add(roofScoop);
+    } else if (team.bodyStyle === 'muscle_fastback') {
+      // Supercharger Power-Dome Hood Bulge (Mustang Shelby GT500)
+      const powerDome = new THREE.Mesh(
+        new THREE.BoxGeometry(0.86, 0.12, 1.28),
+        customLiveryStyle === 'carbon_hood' ? (ghostMat || shared.carbonMat) : solidPaintMat
+      );
+      powerDome.position.set(0, 0.78, 1.24);
+      bodyGroup.add(powerDome);
+    } else if (team.bodyStyle === 'mid_wedge') {
+      // Mid-Engine Sideblades (Audi R8 V10, Ferrari 488 Pista, McLaren 720S, Corvette C8 Z06)
+      for (const sx of [-0.97, 0.97]) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.48, 0.78), ghostMat || shared.carbonMat);
+        blade.position.set(sx, 0.56, -0.45);
+        bodyGroup.add(blade);
+      }
+    }
+
+    // Custom Livery Options (Twin Racing Stripes, Carbon Hood, or Apex Pro Accents)
+    if (customLiveryStyle === 'stripes' || team.id === 'mustang_gt500' || team.id === 'ferrari_488') {
+      for (const sx of [-0.17, 0.17]) {
+        const stripeHood = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.015, 1.45), accentMat);
+        stripeHood.position.set(sx, 0.79, 1.30);
+        stripeHood.rotation.x = 0.09;
+        bodyGroup.add(stripeHood);
+      }
+    } else if (customLiveryStyle === 'carbon_hood') {
+      const carbonHood = new THREE.Mesh(new THREE.BoxGeometry(1.24, 0.02, 1.38), ghostMat || shared.carbonMat);
+      carbonHood.position.set(0, 0.78, 1.30);
+      carbonHood.rotation.x = 0.08;
+      bodyGroup.add(carbonHood);
+    }
+
+    // Active Rear DRS / Airbrake Wing on drsFlapGroup
+    drsFlapGroup.position.set(0, 1.12, -2.10);
+    const gtWingMesh = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.04, 0.32), ghostMat || shared.carbonMat);
+    drsFlapGroup.add(gtWingMesh);
+    bodyGroup.add(drsFlapGroup);
+
+    // Front Splitter on frontWingGroup (for damage droop visualization)
+    frontWingGroup.position.set(0, 0.14, 2.12);
+    const frontLip = new THREE.Mesh(new THREE.BoxGeometry(1.96, 0.045, 0.36), accentMat);
+    frontWingGroup.add(frontLip);
+    bodyGroup.add(frontWingGroup);
+
+    // Cockpit Interior Dashboard, A-Pillars, Panoramic Rearview Mirror & Round GT Steering Wheel
+    steerWheelGroup.position.set(0, 0.72, 0.38);
+    const gtRim = new THREE.Mesh(new THREE.TorusGeometry(0.155, 0.022, 12, 28), ghostMat || shared.carbonMat);
+    steerWheelGroup.add(gtRim);
+    const gtSpoke = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.035, 0.02), accentMat);
+    steerWheelGroup.add(gtSpoke);
+
+    if (!isGhost) {
+      const mirrorFrame = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.085, 0.03), shared.carbonMat);
+      mirrorFrame.position.set(0, 1.06, 0.36);
+      bodyGroup.add(mirrorFrame);
+      const mirrorGlass = new THREE.Mesh(new THREE.PlaneGeometry(0.29, 0.068), shared.mirrorGlassMat);
+      mirrorGlass.position.set(0, 1.06, 0.342);
+      mirrorGlass.rotation.y = Math.PI;
+      bodyGroup.add(mirrorGlass);
+    }
+  } else if (useGlb) {
     const lod0 = fh6Assets.f1Lod0!;
     const lod1 = fh6Assets.f1Lod1!;
     if (heroHeroic || isGhost) {
       bodyGroup.add(buildBodyFromGlb(heroHeroic ? lod0 : lod1));
     } else {
-      // Automatic 3D Distance LOD: 98.5k-tri Subsurf LOD0 up close (<22m), 19.3k-tri LOD1 down the straight!
       const bodyLod = new THREE.LOD();
       bodyLod.addLevel(buildBodyFromGlb(lod0), 0);
       bodyLod.addLevel(buildBodyFromGlb(lod1), 22);
@@ -1563,6 +1737,55 @@ export function buildF1Car(
   }
   bodyGroup.add(steerWheelGroup);
 
+  // Police Red/Blue Strobe Lightbar for Cops & Robbers Mode (hidden unless state.copsRole === 'COP')
+  let policeLightbarGroup: THREE.Group | undefined;
+  let policeRedMat: THREE.MeshStandardMaterial | undefined;
+  let policeBlueMat: THREE.MeshStandardMaterial | undefined;
+  let infectionAuraMesh: THREE.Mesh | undefined;
+
+  if (!isGhost) {
+    policeLightbarGroup = new THREE.Group();
+    policeLightbarGroup.position.set(0, isRoadSupercar ? 1.27 : 1.13, isRoadSupercar ? -0.16 : -0.26);
+    policeLightbarGroup.visible = false;
+
+    policeRedMat = new THREE.MeshStandardMaterial({
+      color: '#ff1122',
+      emissive: '#ff0818',
+      emissiveIntensity: 3.5,
+      toneMapped: false
+    });
+    policeBlueMat = new THREE.MeshStandardMaterial({
+      color: '#0066ff',
+      emissive: '#0088ff',
+      emissiveIntensity: 0.4,
+      toneMapped: false
+    });
+    const podGeo = new THREE.BoxGeometry(0.46, 0.075, 0.16);
+    const redPod = new THREE.Mesh(podGeo, policeRedMat);
+    redPod.position.x = -0.26;
+    const bluePod = new THREE.Mesh(podGeo, policeBlueMat);
+    bluePod.position.x = 0.26;
+    policeLightbarGroup.add(redPod, bluePod);
+    bodyGroup.add(policeLightbarGroup);
+
+    // Toxic Neon-Green Underglow Aura for Infection / Virus Mode (hidden unless state.infected === true)
+    const auraGeo = new THREE.RingGeometry(1.15, 2.35, 36);
+    const auraMat = new THREE.MeshBasicMaterial({
+      color: '#39ff14',
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    });
+    infectionAuraMesh = new THREE.Mesh(auraGeo, auraMat);
+    infectionAuraMesh.rotation.x = -Math.PI / 2;
+    infectionAuraMesh.position.set(0, 0.035, 0);
+    infectionAuraMesh.visible = false;
+    root.add(infectionAuraMesh);
+  }
+
   // Soft Volumetric Additive Pink-Purple Plasma Backfire Plume
   const exhaustFlameMat = new THREE.MeshBasicMaterial({
     map: getExhaustPlasmaTexture(),
@@ -1600,15 +1823,30 @@ export function buildF1Car(
     side: THREE.DoubleSide
   });
 
+  const customRimMat = (!isGhost && (customRimColor || team.rimAccent))
+    ? new THREE.MeshStandardMaterial({
+        color: customRimColor || team.rimAccent || team.rimColor || '#9aa3b2',
+        metalness: 0.88,
+        roughness: 0.22
+      })
+    : null;
+
   const frontWheelPivots: THREE.Group[] = [];
   const spinWheels: Array<{ mesh: THREE.Group; radius: number; side: number }> = [];
 
-  const wheelDefs = [
-    { key: 'FL' as const, x: 0.94, y: 0.324, z: 1.72, r: 0.345, w: 0.35, front: true, side: 1 },
-    { key: 'FR' as const, x: -0.94, y: 0.324, z: 1.72, r: 0.345, w: 0.35, front: true, side: -1 },
-    { key: 'RL' as const, x: 0.96, y: 0.344, z: -1.70, r: 0.365, w: 0.46, front: false, side: 1 },
-    { key: 'RR' as const, x: -0.96, y: 0.344, z: -1.70, r: 0.365, w: 0.46, front: false, side: -1 }
-  ];
+  const wheelDefs = isRoadSupercar
+    ? [
+        { key: 'FL' as const, x: 0.90, y: 0.34, z: 1.38, r: 0.345, w: 0.31, front: true, side: 1 },
+        { key: 'FR' as const, x: -0.90, y: 0.34, z: 1.38, r: 0.345, w: 0.31, front: true, side: -1 },
+        { key: 'RL' as const, x: 0.92, y: 0.35, z: -1.38, r: 0.360, w: 0.36, front: false, side: 1 },
+        { key: 'RR' as const, x: -0.92, y: 0.35, z: -1.38, r: 0.360, w: 0.36, front: false, side: -1 }
+      ]
+    : [
+        { key: 'FL' as const, x: 0.94, y: 0.324, z: 1.72, r: 0.345, w: 0.35, front: true, side: 1 },
+        { key: 'FR' as const, x: -0.94, y: 0.324, z: 1.72, r: 0.345, w: 0.35, front: true, side: -1 },
+        { key: 'RL' as const, x: 0.96, y: 0.344, z: -1.70, r: 0.365, w: 0.46, front: false, side: 1 },
+        { key: 'RR' as const, x: -0.96, y: 0.344, z: -1.70, r: 0.365, w: 0.46, front: false, side: -1 }
+      ];
 
   const glbWheelSet = useGlb ? (heroHeroic ? fh6Assets.f1Lod0!.wheels : fh6Assets.f1Lod1!.wheels) : null;
 
@@ -1627,7 +1865,7 @@ export function buildF1Car(
       tireMesh.receiveShadow = !isGhost;
       spinGroup.add(tireMesh);
 
-      const rimMesh = new THREE.Mesh(gw.rimGeo, ghostMat || shared.rimAlloyMat);
+      const rimMesh = new THREE.Mesh(gw.rimGeo, ghostMat || customRimMat || shared.rimAlloyMat);
       rimMesh.castShadow = !isGhost;
       spinGroup.add(rimMesh);
     } else {
@@ -1640,7 +1878,6 @@ export function buildF1Car(
       spinGroup.add(new THREE.Mesh(gw?.sideGeo || fb.sideGeo, sidewallMat));
       pivot.add(new THREE.Mesh(gw?.discGeo || fb.discGeo, brakeDiscMat));
 
-      // Forza-style High-Speed Rotational Rim Motion-Blur Disc (shared geometry -> zero VRAM leaks!)
       const blurDisc = new THREE.Mesh(wd.front ? shared.frontBlurGeo : shared.rearBlurGeo, wheelBlurMat);
       blurDisc.rotation.y = wd.side > 0 ? Math.PI / 2 : -Math.PI / 2;
       blurDisc.position.x = wd.side * (wd.w * 0.468);
@@ -1678,6 +1915,10 @@ export function buildF1Car(
     exhaustCone,
     sidewallMat,
     wheelBlurMat,
+    policeLightbarGroup,
+    policeRedMat,
+    policeBlueMat,
+    infectionAuraMesh,
     lastOledUpdate: 0
   };
 }
@@ -1709,14 +1950,15 @@ export function updateCarVisuals(carVis: F1CarVisual, state: CarState, dt: numbe
   carVis.drsFlapGroup.rotation.x += (targetDrsRot - carVis.drsFlapGroup.rotation.x) * Math.min(1, dt * 14);
 
   // 4. Visual 3D Front Wing Damage Droop & Vibration
+  const baseFwY = carVis.frontWingGroup.position.z < 2.3 ? 0.14 : 0.068;
   if (state.wingDamage > 0.12) {
     const jitter = Math.sin(nowMs * 0.05) * state.wingDamage * 0.025 * Math.min(1, Math.abs(state.speed) / 40);
     carVis.frontWingGroup.rotation.z = state.wingDamage * 0.18 + jitter;
     carVis.frontWingGroup.rotation.x = state.wingDamage * 0.12;
-    carVis.frontWingGroup.position.y = 0.068 - state.wingDamage * 0.032;
+    carVis.frontWingGroup.position.y = baseFwY - state.wingDamage * 0.032;
   } else {
     carVis.frontWingGroup.rotation.set(0, 0, 0);
-    carVis.frontWingGroup.position.y = 0.068;
+    carVis.frontWingGroup.position.y = baseFwY;
   }
 
   // 5. Sprung chassis suspension squat, dive, roll & ground-effect porpoising
@@ -1738,7 +1980,8 @@ export function updateCarVisuals(carVis: F1CarVisual, state: CarState, dt: numbe
   const brakeHeat = THREE.MathUtils.clamp((state.brakeTemp - 420) / 480, 0, 1) * 3.4;
   carVis.brakeDiscMat.emissiveIntensity += (brakeHeat - carVis.brakeDiscMat.emissiveIntensity) * Math.min(1, dt * 8);
 
-  const highRpmBurst = state.rpm > 11000 ? 0.62 + Math.sin(nowMs * 0.09) * 0.25 : 0;
+  const maxRpm = state.team.physics.maxRpm ?? 15000;
+  const highRpmBurst = state.rpm > maxRpm * 0.78 ? 0.62 + Math.sin(nowMs * 0.09) * 0.25 : 0;
   if (state.shiftFlameTimer > 0 || highRpmBurst > 0) {
     const shiftIntensity = state.shiftFlameTimer > 0 ? 0.96 * (state.shiftFlameTimer / 0.11) : highRpmBurst;
     carVis.exhaustFlameMat.opacity = shiftIntensity;
@@ -1748,6 +1991,25 @@ export function updateCarVisuals(carVis: F1CarVisual, state: CarState, dt: numbe
   } else {
     carVis.exhaustFlameMat.opacity = 0;
     carVis.exhaustCone.visible = false;
+  }
+
+  // Police Lightbar Red/Blue Alternating Strobe (Cops & Robbers Mode) & Toxic Neon Underglow (Infection Mode)
+  if (carVis.policeLightbarGroup) {
+    const isCop = state.copsRole === 'COP';
+    carVis.policeLightbarGroup.visible = isCop;
+    if (isCop && carVis.policeRedMat && carVis.policeBlueMat) {
+      const phase = Math.floor(nowMs / 105) % 2 === 0;
+      carVis.policeRedMat.emissiveIntensity = phase ? 4.8 : 0.3;
+      carVis.policeBlueMat.emissiveIntensity = phase ? 0.3 : 4.8;
+    }
+  }
+  if (carVis.infectionAuraMesh) {
+    const isInfected = Boolean(state.infected);
+    carVis.infectionAuraMesh.visible = isInfected;
+    if (isInfected) {
+      const s = 1.0 + Math.sin(nowMs * 0.008) * 0.12;
+      carVis.infectionAuraMesh.scale.set(s, s, 1);
+    }
   }
 
   // Glowing Red Taillights brighten under braking & pulse when harvesting ERS!

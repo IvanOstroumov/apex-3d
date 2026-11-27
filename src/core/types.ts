@@ -1,14 +1,54 @@
 import type * as THREE from 'three';
 
 export type WeatherType = 'dry' | 'overcast' | 'rain' | 'dynamic';
+export type TimeOfDayType = 'day' | 'sunset' | 'night';
 export type QualityPreset = 'low' | 'medium' | 'high' | 'ultra';
-export type GameMode = 'quick_race' | 'weekend' | 'championship' | 'time_attack';
+export type GameMode =
+  | 'quick_race'
+  | 'weekend'
+  | 'championship'
+  | 'time_attack'
+  | 'track_day'
+  | 'knockout'
+  | 'team_race'
+  | 'cops_robbers'
+  | 'infection';
 export type TireCompoundId = 'soft' | 'medium' | 'hard' | 'inter' | 'wet';
 export type DifficultyId = 'rookie' | 'pro' | 'ace' | 'legend';
 export type CameraMode = 'CHASE' | 'T-CAM' | 'COCKPIT' | 'NOSE';
 export type ERSMode = 'none' | 'medium' | 'overtake' | 'hotlap';
 export type SetupPresetId = 'balanced' | 'low_drag' | 'high_downforce' | 'anti_understeer' | 'anti_oversteer';
 export type RaceFlag = 'GREEN' | 'YELLOW' | 'VSC' | 'BLUE';
+export type ShifterMode = 'paddles' | 'sequential' | 'h_pattern';
+export type PaintFinishType = 'default' | 'metallic' | 'matte' | 'pearl' | 'chrome';
+export type LiveryStyleType = 'stock' | 'stripes' | 'carbon_hood' | 'apex_pro';
+export type VehicleModelId =
+  | 'f1_gp'
+  | 'audi_r8'
+  | 'porsche_911_gt3'
+  | 'ferrari_488'
+  | 'lambo_huracan'
+  | 'nissan_gtr'
+  | 'bmw_m4'
+  | 'mclaren_720s'
+  | 'amg_gt'
+  | 'corvette_c8'
+  | 'mustang_gt500'
+  | 'bugatti_chiron'
+  | 'koenigsegg_jesko';
+
+export type EngineToneType =
+  | 'ferrari'
+  | 'honda'
+  | 'mercedes'
+  | 'monster'
+  | 'custom'
+  | 'v10_screamer'
+  | 'v8_biturbo'
+  | 'flat6_boxer'
+  | 'v8_supercharged'
+  | 'w16_quadturbo'
+  | 'i6_turbo';
 
 export interface SetupPresetSpec {
   id: SetupPresetId;
@@ -22,6 +62,9 @@ export interface SetupPresetSpec {
 
 export interface TeamPhysicsSpec {
   mass: number;
+  drivetrain?: 'RWD' | 'AWD';
+  maxRpm?: number;
+  gearSpeedMult?: number;
   icePowerKW: number;
   ersPowerKW: number;
   cdA: number;
@@ -30,7 +73,7 @@ export interface TeamPhysicsSpec {
   mechGrip: number;
   maxBrakeForce: number;
   aeroBalance: number;
-  puTone: 'ferrari' | 'honda' | 'mercedes' | 'monster' | 'custom';
+  puTone: EngineToneType;
 }
 
 export interface TeamConfig {
@@ -42,6 +85,13 @@ export interface TeamConfig {
   number: number;
   aiNumber: number;
   tagline: string;
+  vehicleCategory?: 'f1' | 'supercar' | 'hypercar' | 'sport' | 'muscle';
+  vehicleModelId?: VehicleModelId;
+  drivetrainLabel?: 'RWD' | 'AWD';
+  powerHP?: number;
+  topSpeedKmh?: number;
+  bodyStyle?: 'f1' | 'mid_wedge' | 'gt_coupe' | 'hyper_fin' | 'muscle_fastback';
+  wingStyle?: 'swan_gt3' | 'active_hyper' | 'ducktail' | 'low_drag';
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
@@ -227,7 +277,7 @@ export interface GameSettings {
   customRideHeightMm: number;     // 18..42 (mm)
   customTirePressurePsi: number;  // 20..26 (PSI)
 
-  // 4. Controls, FFB & Driving Assists
+  // 4. Controls, FFB, Sim-Racing Wheel/Pedals/Shifter & Driving Assists
   steerSensitivity: number;       // 40..180 (%)
   steerLinearity: number;         // 100..250 (1.0..2.5 gamma)
   steerDeadzone: number;          // 0..25 (%)
@@ -237,8 +287,22 @@ export interface GameSettings {
   manualGearbox: boolean;
   racingLine: boolean;
   brakeAssist: 'off' | 'low' | 'high';
+  shifterMode?: ShifterMode;
+  wheelRotationDeg?: number;      // 180..1080
+  pedalDeadzone?: number;         // 0..20 (%)
+  throttleLinearity?: number;     // 50..200 (%)
+  brakeLinearity?: number;        // 50..250 (%)
+  invertSteerAxis?: boolean;
+  invertThrottleAxis?: boolean;
+  invertBrakeAxis?: boolean;
+  invertClutchAxis?: boolean;
+  steerAxisIndex?: number;
+  throttleAxisIndex?: number;
+  brakeAxisIndex?: number;
+  clutchAxisIndex?: number;
+  showRearviewMirror?: boolean;
 
-  // 5. Audio, AI & FIA Rules
+  // 5. Audio, AI, FIA Rules & Aesthetic/Tuning Customization
   masterVolume: number;           // 0..100 (%)
   engineVolume: number;           // 0..150 (%)
   sfxVolume: number;              // 0..150 (%)
@@ -249,6 +313,13 @@ export interface GameSettings {
   fuelBurnMult: number;           // 0..200 (%)
   trackLimitsStrictness: 'off' | 'standard' | 'strict';
   timeOfDaySpeed: number;         // 0..15 (x)
+  timeOfDay?: TimeOfDayType;      // 'day' | 'sunset' | 'night'
+  damageEnabled?: boolean;
+  gearRatioPreset?: 'short' | 'balanced' | 'long';
+  customPaintColor?: string;
+  customPaintFinish?: PaintFinishType;
+  customLiveryStyle?: LiveryStyleType;
+  customRimColor?: string;
 }
 
 export interface TelemetryTracePoint {
@@ -266,6 +337,9 @@ export interface CarState {
   number: number;
   code: string;
   isPlayer: boolean;
+  isRemotePlayer?: boolean;
+  remotePeerId?: string;
+  driverName?: string;
   gridSlot: number;
 
   // Transform & Velocity
@@ -292,12 +366,14 @@ export interface CarState {
   // Controls
   throttleInput: number;
   brakeInput: number;
+  clutchInput?: number;
   steerInput: number;
   drsInput: boolean;
   ersInput: boolean;
   ersMode: ERSMode;
   shiftUpReq: boolean;
   shiftDownReq: boolean;
+  directGearReq?: number | null; // For H-Pattern Shifter (1..7 or -1 for Reverse, 0 for Neutral)
 
   // Powertrain, Fuel, Aero & Hybrid ERS
   gear: number;
@@ -369,6 +445,16 @@ export interface CarState {
   raceDistance: number;
   prevS: number;
   passedHalfway: boolean;
+
+  // Arcade & Special Game Mode State (Knockout, Team Race, Cops & Robbers, Infection)
+  eliminated?: boolean;
+  teamSquad?: 'RED' | 'BLUE';
+  copsRole?: 'COP' | 'ROBBER';
+  robberHealth?: number;     // 0..100 (%)
+  robberArrested?: boolean;
+  sirenActive?: boolean;
+  infected?: boolean;
+  survivalTimeSec?: number;
 
   // AI Driver Memory & Personality
   aiLaneOffset: number;
